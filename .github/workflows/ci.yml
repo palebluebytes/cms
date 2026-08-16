@@ -46,6 +46,8 @@ jobs:
         with:
           node-version: 24
 
-      - run: pnpm install --no-frozen-lockfile
+      # Frozen: the lockfile pins the exact Prettier, so a patch release of it
+      # can't turn this job red on a commit that didn't touch formatting.
+      - run: pnpm install --frozen-lockfile
 
       - run: pnpm exec prettier --check .

@@ -129,6 +129,22 @@ the release just describes itself wrongly, permanently.
 footer takes `0.1.0` → `0.2.0`, not `1.0.0`. Going to 1.0 is a deliberate act —
 set `1.0.0` in the manifest — not something a commit can trigger by accident.
 
+### The release PR depends on a repo setting, not just this repo
+
+**Settings → Actions → General → Workflow permissions → "Allow GitHub Actions
+to create and approve pull requests"** must be on. With it off, release-please
+still runs, still computes the version, still pushes its
+`release-please--branches--main` branch — and then fails on the last call with
+`GitHub Actions is not permitted to create or approve pull requests`. Everything
+looks configured; only the PR is missing.
+
+### Prettier must not check what release-please writes
+
+`CHANGELOG.md` and `.release-please-manifest.json` are in `.prettierignore`
+because release-please rewrites them in its own format. Take them out and the
+first release lands a `main` that fails its own format check, in a file no
+human touched.
+
 ### CI does not run on the release PR
 
 Releases are cut with the default `GITHUB_TOKEN`, and PRs it opens deliberately

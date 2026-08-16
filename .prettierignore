@@ -1,0 +1,10 @@
+# Prettier already honours .gitignore; this file is only for generated
+# artefacts that *are* committed.
+
+# release-please rewrites these on every release with its own formatting.
+# Checking them means the first release PR fails CI on main.
+CHANGELOG.md
+.release-please-manifest.json
+
+# pnpm's format, not Prettier's.
+pnpm-lock.yaml
