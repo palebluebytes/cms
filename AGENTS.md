@@ -84,3 +84,20 @@ Both transports take `fetch` as an option and the normalisers are pure, so every
 test is a plain function call. `npm test` is `node --test` with no fixtures
 directory, no mock server and no key. Keep it that way: a test that needs a
 credential is a test nobody runs.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub issues on `palebluebytes/google-cms`, driven through the
+`gh` CLI. See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
+
+### Triage labels
+
+The five canonical triage roles, each label string equal to its name. See
+[`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
+
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root, both created
+lazily. See [`docs/agents/domain.md`](docs/agents/domain.md).
