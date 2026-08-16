@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The package targets any JS runtime, so the floor matters more than
+        # the ceiling. 18 and 20 are both past end-of-life and the `npm test`
+        # glob does not run on them — but `engines` still claims >=18, so this
+        # matrix does not prove that claim. See AGENTS.md.
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      # No install step: the package has zero runtime dependencies and the
+      # tests need neither network nor credentials.
+      - run: node --test "test/**/*.test.js"
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - run: pnpm install --no-frozen-lockfile
+
+      - run: pnpm exec prettier --check .

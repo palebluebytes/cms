@@ -85,6 +85,94 @@ test is a plain function call. `npm test` is `node --test` with no fixtures
 directory, no mock server and no key. Keep it that way: a test that needs a
 credential is a test nobody runs.
 
+## Releases are release-please's, not yours
+
+Releases follow the release-plz model — a bot maintains one open **release PR**;
+merging it is the act of releasing. release-plz itself is cargo-only, so the
+implementation is [release-please](https://github.com/googleapis/release-please),
+the tool release-plz was ported from. Two workflows, one config pair:
+
+| File                            | Owns                                                        |
+| ------------------------------- | ----------------------------------------------------------- |
+| `.github/workflows/ci.yml`      | Tests on Node 22 and 24, plus a Prettier check, on every PR |
+| `.github/workflows/release.yml` | The release PR, and the publish that follows merging it     |
+| `release-please-config.json`    | Release type, changelog sections, pre-1.0 bumping           |
+| `.release-please-manifest.json` | **The** current version                                     |
+
+Push to `main` → release-please updates the release PR. Merge it → it tags,
+creates the GitHub release, and only then does the publish job run.
+
+### CI tests 22 and 24, but `engines` claims `>=18`
+
+The matrix floor is 22 because 18 and 20 are end-of-life and the `npm test`
+glob does not run on them. So the two oldest runtimes the package advertises
+are the two nothing verifies — an `engines` bump or a runner change is a
+decision someone still has to make, not a gap CI will report.
+
+### Never hand-edit a version
+
+`.release-please-manifest.json` is the source of truth; the `version` in
+`package.json` is a copy release-please writes. Bumping `package.json` by hand
+doesn't error — it gets silently overwritten on the next release, and until then
+every consumer reads a version that was never published.
+
+### The commit subject _is_ the changelog
+
+`type(scope): subject` is not house style here, it is input. A fix committed as
+`feat:` releases a minor version and lands under **Features** for good; work
+committed as `chore:` is hidden from the changelog entirely. Nothing warns you —
+the release just describes itself wrongly, permanently.
+
+### Pre-1.0, a breaking change is a _minor_ bump
+
+`bump-minor-pre-major` is on. While the version is `0.x`, a `BREAKING CHANGE:`
+footer takes `0.1.0` → `0.2.0`, not `1.0.0`. Going to 1.0 is a deliberate act —
+set `1.0.0` in the manifest — not something a commit can trigger by accident.
+
+### CI does not run on the release PR
+
+Releases are cut with the default `GITHUB_TOKEN`, and PRs it opens deliberately
+do not trigger further workflows — GitHub's own recursion guard. So the green
+check on `main` is the last signal you get. That is exactly why `release.yml`
+re-runs the tests inside the publish job: it is the only gate between the merge
+and an immutable version.
+
+Switching to a PAT or GitHub App token would make CI run on release PRs. Nothing
+else about the setup depends on that choice.
+
+### A published version can never be replaced
+
+GitHub Packages refuses to republish a version that already exists. There is no
+`--force` and deleting-then-republishing is blocked too. A bad publish is fixed
+only by releasing another version.
+
+### `files` decides what ships, and it is `["src"]`
+
+Anything a consumer needs at runtime must live under `src/`. Add a runtime file
+anywhere else and the tests still pass, the publish still succeeds, and the
+tarball is missing it — the failure surfaces in a consumer's build.
+
+### `publishConfig.registry` is the only thing aiming at GitHub
+
+Remove it and `pnpm publish` goes to npmjs.com — a different registry, a
+different audience, and a package name that isn't yours to take. The scope must
+also stay lowercase and equal to the GitHub owner (`@palebluebytes` ↔
+`palebluebytes`); GitHub Packages rejects any other pairing.
+
+### Consumers need a token even though the repo is public
+
+GitHub Packages requires authentication to _install_, public or not. A consumer
+needs a `read:packages` token and an `.npmrc`:
+
+```
+@palebluebytes:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+This is worth stating in `README.md` before anyone is told to install it —
+without it the install fails with a bare 401 that reads like the package doesn't
+exist.
+
 ## Agent skills
 
 ### Issue tracker

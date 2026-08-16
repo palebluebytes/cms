@@ -5,6 +5,13 @@
 	"type": "module",
 	"license": "MIT",
 	"author": "Pale Blue Bytes",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/palebluebytes/google-cms.git"
+	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	},
 	"exports": {
 		"./drive": "./src/drive.js",
 		"./calendar": "./src/calendar.js",
