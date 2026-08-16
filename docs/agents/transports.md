@@ -1,0 +1,56 @@
+# Transports and normalisers
+
+The shape — `listFiles` / `normalisePhotos` / `fetchPhotos`, and what each half
+is for — is in [`README.md`](../../README.md#transport-normaliser-composition).
+The traps are here.
+
+## Nothing crosses the seam that belongs to a site
+
+Ordering, filtering, formatting, a future/past partition, a default time zone, a
+hard fail on an empty folder: **all of these are consumer decisions.** Each one
+looks like a small kindness and each one serves exactly one caller.
+
+The one that keeps trying to sneak back is a default `timeZone` — the transport
+returns `undefined`, deliberately.
+
+## The normalisers must stay pure
+
+`normalisePhotos` and `normaliseEvents` take a payload and return data. No
+network, no clock, no environment, no locale. A `new Date()` or a
+`toLocaleDateString` in there breaks nothing visibly; it just makes the function
+untestable at the point it is most worth testing, which is the property the whole
+testing story rests on.
+
+## `nextPageToken` must be in the Drive field mask
+
+`fields=files(...)` omits `nextPageToken`, and the page walk then stops after one
+page. A folder of 1500 files silently becomes 1000, with no error anywhere. The
+mask is built as `nextPageToken,files(...)` and `test/drive.test.ts` pins it.
+
+## Google's defaults are wrong in three specific ways
+
+All three are set by the calendar transport and must stay set. What they do for a
+consumer is in [`README.md`](../../README.md#what-the-transport-always-sets);
+what breaks when one is dropped is here.
+
+| Parameter           | Google's default | What dropping it costs                                                          |
+| ------------------- | ---------------- | ------------------------------------------------------------------------------- |
+| `singleEvents`      | `false`          | An unexpanded master with an `RRULE`; a whole series renders as one event       |
+| `orderBy=startTime` | unset            | A non-deterministic page walk (and the API accepts it only with `singleEvents`) |
+| `maxResults`        | 250              | A single un-paginated request that drops the tail, silently                     |
+
+## All-day dates are floating
+
+An all-day `start`/`end` is `YYYY-MM-DD` with no instant. `new Date()` on one
+invents UTC midnight, which is a real date in a real zone and therefore a lie
+that renders as a spurious time — or, west of UTC, the day before.
+
+The only `Date` in the calendar half is inside `inclusiveEnd`, as arithmetic
+scaffolding on a UTC-pinned string; it never escapes.
+
+## Google's all-day `end.date` is exclusive
+
+A 13th-to-16th event arrives ending on the **17th**. `normaliseEvents` steps it
+back so `end` means the same thing for every event. Consumers that emit
+`schema.org` `endDate` want the corrected value; leaving it exclusive puts the
+structured data one day out of step with the visible page.
