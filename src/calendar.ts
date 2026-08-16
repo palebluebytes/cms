@@ -13,6 +13,7 @@
 // `.js` on the type-only import, `.ts` on the value import: see the note in
 // `internal/require-auth.ts`.
 import type { Auth, FetchLike } from "./auth.js";
+import { pages } from "./internal/page-walk.ts";
 import { requireAuth } from "./internal/require-auth.ts";
 
 // 2500 is the API's ceiling; its DEFAULT is 250, which is the size of the tail a
@@ -138,7 +139,7 @@ export interface CalendarOptions {
 export async function listEvents({
 	calendarId,
 	auth,
-	fetch: fetchImpl = globalThis.fetch,
+	fetch: fetchImpl,
 	timeMin,
 	timeMax,
 	maxPages = MAX_PAGES,
@@ -148,19 +149,9 @@ export async function listEvents({
 }> {
 	requireAuth(auth, "listEvents");
 
-	const items: EventResource[] = [];
-	let timeZone: string | undefined;
-	let pageToken: string | undefined;
-
-	for (let page = 1; ; page++) {
-		if (page > maxPages) {
-			throw new Error(
-				`Calendar walk took too many pages (>${maxPages} x ${PAGE_SIZE} ` +
-					`events). A recurring event with no end date expands without limit ` +
-					`under singleEvents.`,
-			);
-		}
-
+	// One page's URL. The three parameters above are the whole of what makes this
+	// a correct calendar listing; the token is the walk's.
+	const url = (pageToken: string | undefined) => {
 		const params = new URLSearchParams({
 			singleEvents: "true",
 			orderBy: "startTime",
@@ -169,32 +160,24 @@ export async function listEvents({
 		if (timeMin) params.set("timeMin", timeMin);
 		if (timeMax) params.set("timeMax", timeMax);
 		if (pageToken) params.set("pageToken", pageToken);
+		return `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`;
+	};
 
-		const request = await auth(
-			new Request(
-				`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
-			),
-		);
-		const response = await fetchImpl(request);
+	const items: EventResource[] = [];
+	let timeZone: string | undefined;
 
-		if (!response.ok) {
-			throw new Error(
-				`Failed to fetch calendar events: ${response.status} ${response.statusText}`,
-			);
-		}
-
-		const body = (await response.json()) as EventsPayload;
+	for await (const body of pages<EventsPayload>(url, {
+		auth,
+		fetch: fetchImpl,
+		maxPages,
+		label: "calendar",
+		capHint:
+			`Each page is up to ${PAGE_SIZE} events; a recurring event with no end ` +
+			`date expands without limit under singleEvents.`,
+	})) {
 		items.push(...(body.items ?? []));
+		// The calendar's own zone arrives on every page; the first one is enough.
 		timeZone ??= body.timeZone;
-
-		if (!body.nextPageToken) break;
-		if (body.nextPageToken === pageToken) {
-			throw new Error(
-				`Calendar returned the same pageToken twice — refusing to loop or to ` +
-					`truncate at ${items.length} events.`,
-			);
-		}
-		pageToken = body.nextPageToken;
 	}
 
 	return { timeZone, items };

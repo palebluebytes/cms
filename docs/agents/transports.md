@@ -21,6 +21,23 @@ network, no clock, no environment, no locale. A `new Date()` or a
 untestable at the point it is most worth testing, which is the property the whole
 testing story rests on.
 
+## The page walk is one module, and it is not in the transports
+
+`listFiles` and `listEvents` say what one page's URL is and hand it to
+[`src/internal/page-walk.ts`](../../src/internal/page-walk.ts). The loop, the
+`maxPages` cap, applying the credential, the response check and the refusal to
+follow a repeated `pageToken` all live there, tested in
+`test/page-walk.test.ts` — not through either transport. A fix belongs in the
+walk, and a third transport gets the guards by construction rather than by
+being copied from one of these two.
+
+What stays with a transport is what Google gets wrong per API: the field mask
+below, and the three defaults after it. The walk knows one field name,
+`nextPageToken`, and nothing else about either API.
+
+The label it takes is a closed union — adding a transport means naming it in
+`PageWalkLabel`.
+
 ## `nextPageToken` must be in the Drive field mask
 
 `fields=files(...)` omits `nextPageToken`, and the page walk then stops after one

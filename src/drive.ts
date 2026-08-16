@@ -11,6 +11,7 @@
 // The type-only import says `.js` and the value import says `.ts`, deliberately:
 // see the note in `internal/require-auth.ts`.
 import type { Auth, FetchLike } from "./auth.js";
+import { pages } from "./internal/page-walk.ts";
 import { requireAuth } from "./internal/require-auth.ts";
 
 // Everything a gallery needs, in ONE listing call. `imageMediaMetadata` rides
@@ -158,7 +159,7 @@ export interface DriveOptions {
 export async function listFiles({
 	folderId,
 	auth,
-	fetch: fetchImpl = globalThis.fetch,
+	fetch: fetchImpl,
 	extraFields = [],
 	extraQuery,
 	maxPages = MAX_PAGES,
@@ -173,17 +174,9 @@ export async function listFiles({
 	const clauses = [`'${folderId}' in parents`, "trashed = false"];
 	if (extraQuery) clauses.push(`(${extraQuery})`);
 
-	const files: DriveFile[] = [];
-	let pageToken: string | undefined;
-
-	for (let page = 1; ; page++) {
-		if (page > maxPages) {
-			throw new Error(
-				`Drive folder walk took too many pages (>${maxPages} x ${PAGE_SIZE} ` +
-					`files). Raise maxPages if the folder really is that large.`,
-			);
-		}
-
+	// One page's URL. The mask and the query are the whole of what makes this a
+	// Drive listing rather than any other walk; the token is the walk's.
+	const url = (pageToken: string | undefined) => {
 		const params = new URLSearchParams({
 			q: clauses.join(" and "),
 			// `nextPageToken` MUST be in the field mask. A `fields=files(...)` mask
@@ -194,29 +187,21 @@ export async function listFiles({
 			pageSize: String(PAGE_SIZE),
 		});
 		if (pageToken) params.set("pageToken", pageToken);
+		return `https://www.googleapis.com/drive/v3/files?${params}`;
+	};
 
-		const request = await auth(
-			new Request(`https://www.googleapis.com/drive/v3/files?${params}`),
-		);
-		const res = await fetchImpl(request);
+	const files: DriveFile[] = [];
 
-		if (!res.ok) {
-			throw new Error(
-				`Failed to list Drive files: ${res.status} ${res.statusText}`,
-			);
-		}
-
-		const body = (await res.json()) as DriveFilesPayload;
+	for await (const body of pages<DriveFilesPayload>(url, {
+		auth,
+		fetch: fetchImpl,
+		maxPages,
+		label: "folder",
+		capHint:
+			`Each page is up to ${PAGE_SIZE} files; raise maxPages if the folder ` +
+			`really is that large.`,
+	})) {
 		files.push(...(body.files ?? []));
-
-		if (!body.nextPageToken) break;
-		if (body.nextPageToken === pageToken) {
-			throw new Error(
-				`Drive returned the same pageToken twice — refusing to loop or to ` +
-					`truncate at ${files.length} files.`,
-			);
-		}
-		pageToken = body.nextPageToken;
 	}
 
 	return { files };
