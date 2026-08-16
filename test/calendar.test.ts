@@ -1,8 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { apiKey } from "../src/auth.js";
-import { fetchEvents, listEvents, normaliseEvents } from "../src/calendar.js";
+import { apiKey, type FetchLike } from "../src/auth.ts";
+import {
+	fetchEvents,
+	listEvents,
+	normaliseEvents,
+	type EventResource,
+} from "../src/calendar.ts";
 
 // What the transport ASKS for, how it walks pages, and what the normaliser makes
 // of the answer. Nothing here formats a date or knows what "now" is — a consumer
@@ -16,19 +21,22 @@ const CALENDAR = "someone@example.test";
 
 // Serve the given pages in order, recording every URL asked for. A page is a raw
 // events.list body: `{timeZone, items, nextPageToken}`.
-function serve(...pages) {
-	const requested = [];
+function serve(...pages: unknown[]) {
+	const requested: URL[] = [];
 	let call = 0;
-	const fetch = async (request) => {
+	const fetch: FetchLike = async (request) => {
 		requested.push(new URL(request.url));
-		const page = pages[Math.min(call++, pages.length - 1)];
-		return { ok: true, status: 200, statusText: "OK", json: async () => page };
+		return Response.json(pages[Math.min(call++, pages.length - 1)]);
 	};
 	return { fetch, requested };
 }
 
 // A timed events.list item.
-function event(summary, startDateTime, extra = {}) {
+function event(
+	summary: string,
+	startDateTime?: string,
+	extra: Partial<EventResource> = {},
+): EventResource {
 	return {
 		id: `id-${summary}`,
 		status: "confirmed",
@@ -166,16 +174,12 @@ test("throws rather than truncating when the API repeats a pageToken", async () 
 test("throws rather than paging forever past the cap", async () => {
 	// An unbounded recurring series expands without end once singleEvents is on.
 	let n = 0;
-	const fetch = async () => ({
-		ok: true,
-		status: 200,
-		statusText: "OK",
-		json: async () => ({
+	const fetch: FetchLike = async () =>
+		Response.json({
 			timeZone: "Europe/London",
 			items: [event(`Instance ${n}`, "2099-03-04T19:00:00+00:00")],
 			nextPageToken: `token-${++n}`,
-		}),
-	});
+		});
 
 	await assert.rejects(
 		() => listEvents({ calendarId: CALENDAR, auth, fetch }),
@@ -186,14 +190,9 @@ test("throws rather than paging forever past the cap", async () => {
 test("maxPages is a caller's backstop, not a fixed one", async () => {
 	let n = 0;
 	let calls = 0;
-	const fetch = async () => {
+	const fetch: FetchLike = async () => {
 		calls++;
-		return {
-			ok: true,
-			status: 200,
-			statusText: "OK",
-			json: async () => ({ items: [], nextPageToken: `token-${++n}` }),
-		};
+		return Response.json({ items: [], nextPageToken: `token-${++n}` });
 	};
 
 	await assert.rejects(
@@ -206,12 +205,8 @@ test("maxPages is a caller's backstop, not a fixed one", async () => {
 // ------------------------------------------------------------------ failures
 
 test("throws on a non-OK events.list response", async () => {
-	const fetch = async () => ({
-		ok: false,
-		status: 403,
-		statusText: "Forbidden",
-		json: async () => ({}),
-	});
+	const fetch: FetchLike = async () =>
+		new Response("{}", { status: 403, statusText: "Forbidden" });
 
 	await assert.rejects(
 		() => listEvents({ calendarId: CALENDAR, auth, fetch }),
@@ -223,6 +218,7 @@ test("throws immediately when no auth was passed", async () => {
 	const { fetch } = serve({ items: [] });
 
 	await assert.rejects(
+		// @ts-expect-error — the omission the runtime guard exists for
 		() => listEvents({ calendarId: CALENDAR, fetch }),
 		/auth/i,
 	);
@@ -239,6 +235,14 @@ test("cancelled events and events with no start are dropped", async () => {
 				status: "cancelled",
 			},
 			{ ...event("Startless", "2099-03-06T19:00:00+00:00"), start: undefined },
+			// A start that carries neither `date` nor `dateTime` is the same
+			// absence wearing a wrapper, and goes the same way: `start` is a
+			// string on the way out, so an event that cannot supply one is noise.
+			//
+			// This case used to be worse than untested: with an `end` present it
+			// threw a TypeError out of `isMultiDay`, and without one it emitted a
+			// record whose `start` was `undefined`. One drop replaces both.
+			{ ...event("Dateless", "2099-03-07T19:00:00+00:00"), start: {} },
 		],
 	});
 
@@ -347,7 +351,7 @@ test("description and location are empty strings when unset, never undefined", (
 	const [e] = normaliseEvents({
 		items: [
 			{
-				...event("Bare"),
+				...event("Bare", "2099-03-04T19:00:00+00:00"),
 				description: undefined,
 				location: undefined,
 			},

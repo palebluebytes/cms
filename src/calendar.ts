@@ -10,7 +10,10 @@
  * consumer never imports `@palebluebytes/google-cms/drive`.
  */
 
-import { requireAuth } from "./internal/require-auth.js";
+// `.js` on the type-only import, `.ts` on the value import: see the note in
+// `internal/require-auth.ts`.
+import type { Auth, FetchLike } from "./auth.js";
+import { requireAuth } from "./internal/require-auth.ts";
 
 // 2500 is the API's ceiling; its DEFAULT is 250, which is the size of the tail a
 // growing calendar loses to a single un-paginated request.
@@ -20,6 +23,38 @@ const PAGE_SIZE = 2500;
 // without limit, so an unterminating walk must fail loudly rather than loop or
 // truncate.
 const MAX_PAGES = 4;
+
+/**
+ * One end of an event, as Google sends it: `date` for an all-day event
+ * (`YYYY-MM-DD`, floating), `dateTime` for a timed one (RFC3339 with an offset).
+ * Exactly one of the two is present.
+ */
+export interface EventDateTime {
+	date?: string;
+	dateTime?: string;
+	timeZone?: string;
+}
+
+/** A raw `events.list` item, as `listEvents` hands it on. */
+export interface EventResource {
+	id: string;
+	status?: string;
+	summary?: string;
+	description?: string;
+	location?: string;
+	start?: EventDateTime;
+	end?: EventDateTime;
+	/** Everything else Google sends and this package does not interpret. */
+	[field: string]: unknown;
+}
+
+/** The raw `events.list` body. */
+export interface EventsPayload {
+	timeZone?: string;
+	items?: EventResource[];
+	/** Present only while the walk is in progress — `listEvents` exhausts it. */
+	nextPageToken?: string;
+}
 
 /**
  * An event, as this package hands it over.
@@ -33,35 +68,56 @@ const MAX_PAGES = 4;
  *
  * They also sort correctly as strings, which is the one thing every consumer
  * does with them.
- *
- * @typedef {object} CalendarEvent
- * @property {string} id
- * @property {string} summary
- * @property {string} description `""` when unset.
- * @property {string} location `""` when unset.
- * @property {boolean} isAllDay
- * @property {boolean} isMultiDay True when the span covers more than one
- *   calendar day, computed AFTER the inclusive-end correction.
- * @property {string} start
- * @property {string|undefined} end INCLUSIVE. Google's all-day `end.date` is
- *   EXCLUSIVE — a 13th-to-16th event arrives ending on the 17th — and this is
- *   stepped back, so `end` means the same thing whether or not the event is
- *   all-day. `undefined` only if Google sent no end at all.
- * @property {string|undefined} timeZone The event's own zone, else the
- *   calendar's, else `undefined`. NEVER a default: a fallback zone is the
- *   consumer's truth, not this package's.
  */
+export interface CalendarEvent {
+	id: string;
+	/**
+	 * `undefined` for an untitled event — Google omits `summary` entirely for
+	 * one, and inventing a title here would be the site's decision, not this
+	 * package's.
+	 */
+	summary: string | undefined;
+	/** `""` when unset. */
+	description: string;
+	/** `""` when unset. */
+	location: string;
+	isAllDay: boolean;
+	/**
+	 * True when the span covers more than one calendar day, computed AFTER the
+	 * inclusive-end correction.
+	 */
+	isMultiDay: boolean;
+	start: string;
+	/**
+	 * INCLUSIVE. Google's all-day `end.date` is EXCLUSIVE — a 13th-to-16th event
+	 * arrives ending on the 17th — and this is stepped back, so `end` means the
+	 * same thing whether or not the event is all-day. `undefined` only if Google
+	 * sent no end at all.
+	 */
+	end: string | undefined;
+	/**
+	 * The event's own zone, else the calendar's, else `undefined`. NEVER a
+	 * default: a fallback zone is the consumer's truth, not this package's.
+	 */
+	timeZone: string | undefined;
+}
 
-/**
- * @typedef {object} CalendarOptions
- * @property {string} calendarId
- * @property {import("./auth.js").Auth} auth Required.
- * @property {typeof fetch} [fetch] Defaults to the global. Integration-test seam.
- * @property {string} [timeMin] RFC3339. Omitted by default: a site that renders
- *   past appearances would silently lose half its page to a default window.
- * @property {string} [timeMax] RFC3339.
- * @property {number} [maxPages=4] Backstop on the page walk.
- */
+export interface CalendarOptions {
+	calendarId: string;
+	/** Required. */
+	auth: Auth;
+	/** Defaults to the global. Integration-test seam. */
+	fetch?: FetchLike;
+	/**
+	 * RFC3339. Omitted by default: a site that renders past appearances would
+	 * silently lose half its page to a default window.
+	 */
+	timeMin?: string;
+	/** RFC3339. */
+	timeMax?: string;
+	/** Backstop on the page walk. Defaults to 4. */
+	maxPages?: number;
+}
 
 /**
  * The raw `events.list` payload — `{timeZone, items}` — paginated to exhaustion.
@@ -78,9 +134,6 @@ const MAX_PAGES = 4;
  *   order: consumers sort.
  * - `maxResults` + `nextPageToken`: the default page is 250 events, and a single
  *   un-paginated request drops everything past it, silently.
- *
- * @param {CalendarOptions} options
- * @returns {Promise<{timeZone?: string, items: object[]}>}
  */
 export async function listEvents({
 	calendarId,
@@ -89,12 +142,15 @@ export async function listEvents({
 	timeMin,
 	timeMax,
 	maxPages = MAX_PAGES,
-}) {
+}: CalendarOptions): Promise<{
+	timeZone: string | undefined;
+	items: EventResource[];
+}> {
 	requireAuth(auth, "listEvents");
 
-	const items = [];
-	let timeZone;
-	let pageToken;
+	const items: EventResource[] = [];
+	let timeZone: string | undefined;
+	let pageToken: string | undefined;
 
 	for (let page = 1; ; page++) {
 		if (page > maxPages) {
@@ -127,7 +183,7 @@ export async function listEvents({
 			);
 		}
 
-		const body = await response.json();
+		const body = (await response.json()) as EventsPayload;
 		items.push(...(body.items ?? []));
 		timeZone ??= body.timeZone;
 
@@ -151,7 +207,7 @@ export async function listEvents({
  * Done in UTC on a date-only string, which has no instant of its own: the Date
  * is arithmetic scaffolding here and never escapes.
  */
-function inclusiveEnd(end) {
+function inclusiveEnd(end: string): string {
 	const date = new Date(`${end}T00:00:00Z`);
 	date.setUTCDate(date.getUTCDate() - 1);
 	return date.toISOString().slice(0, 10);
@@ -161,7 +217,7 @@ function inclusiveEnd(end) {
  * Pure. Raw payload in, `CalendarEvent[]` out — no network, no clock, no
  * environment, no locale.
  *
- * Drops `status === "cancelled"` and events with no `start`: that is
+ * Drops `status === "cancelled"` and events with no usable `start`: that is
  * transport-shaped noise, not a display choice.
  *
  * Does NOT sort and does NOT partition future from past. Both need a clock,
@@ -169,49 +225,57 @@ function inclusiveEnd(end) {
  * worth testing — and a package that partitioned would have to decide what "now"
  * means for a floating all-day date, which has no answer that is right for every
  * site.
- *
- * @param {{timeZone?: string, items?: object[]}} payload
- * @returns {CalendarEvent[]}
  */
-export function normaliseEvents(payload) {
+export function normaliseEvents(
+	payload: EventsPayload | null | undefined,
+): CalendarEvent[] {
 	const calendarTimeZone = payload?.timeZone;
 
-	return (payload?.items ?? [])
-		.filter((event) => event.status !== "cancelled" && event.start)
-		.map((event) => {
-			const { id, summary, description, location, start, end } = event;
+	// `flatMap` rather than filter-then-map: dropping an event and reading its
+	// start are the same question, and answering it once is what lets `start`
+	// below be a string rather than a maybe-string.
+	return (payload?.items ?? []).flatMap((event) => {
+		const { id, summary, description, location, start, end } = event;
 
-			// All-day events use `date` (YYYY-MM-DD); timed events use `dateTime`.
-			const isAllDay = !start.dateTime;
-			const startAt = start.dateTime || start.date;
-			const rawEnd = end?.dateTime || end?.date || undefined;
-			const endAt = isAllDay && rawEnd ? inclusiveEnd(rawEnd) : rawEnd;
+		// All-day events use `date` (YYYY-MM-DD); timed events use `dateTime`, so
+		// having a `dateTime` is what "timed" MEANS — read once, and both the
+		// drop below and `isAllDay` follow from it.
+		const timedStart = start?.dateTime;
+		const startAt = timedStart || start?.date;
 
-			return {
+		// Cancelled events, and events carrying no usable start, are
+		// transport-shaped noise rather than a display choice.
+		if (event.status === "cancelled" || !startAt) return [];
+
+		const rawEnd = end?.dateTime || end?.date || undefined;
+		const endAt = !timedStart && rawEnd ? inclusiveEnd(rawEnd) : rawEnd;
+
+		return [
+			{
 				id,
 				summary,
 				description: description ?? "",
 				location: location ?? "",
-				isAllDay,
+				isAllDay: !timedStart,
 				// Compare calendar days only. Both strings carry their own day in
 				// their first ten characters — a timed one in the offset Google
 				// returned it in — so this needs no zone and no clock.
 				isMultiDay:
-					Boolean(endAt) && startAt.slice(0, 10) !== endAt.slice(0, 10),
+					endAt !== undefined && startAt.slice(0, 10) !== endAt.slice(0, 10),
 				start: startAt,
 				end: endAt,
-				timeZone: start.timeZone || calendarTimeZone,
-			};
-		});
+				timeZone: start?.timeZone || calendarTimeZone,
+			},
+		];
+	});
 }
 
 /**
  * `listEvents` + `normaliseEvents`, so the whole thing is one expression. An
  * empty calendar is `[]`, not an error.
- *
- * @param {CalendarOptions} options
- * @returns {Promise<CalendarEvent[]>}
  */
-export async function fetchEvents(options) {
+export async function fetchEvents(
+	options: CalendarOptions,
+): Promise<CalendarEvent[]> {
 	return normaliseEvents(await listEvents(options));
 }

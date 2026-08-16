@@ -1,13 +1,15 @@
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { apiKey } from "../src/auth.js";
+import { apiKey, type FetchLike } from "../src/auth.ts";
 import {
 	fetchBytes,
 	fetchPhotos,
 	listFiles,
 	normalisePhotos,
-} from "../src/drive.js";
+	type DriveFile,
+	type ImageMediaMetadata,
+} from "../src/drive.ts";
 
 // Transport, normaliser and delivery. `listFiles` and `fetchBytes` take their
 // `fetch` as an option, so nothing here touches `globalThis.fetch` or the
@@ -20,15 +22,29 @@ afterEach(() => {
 	console.warn = realWarn;
 });
 
-function captureWarnings() {
-	const warnings = [];
-	console.warn = (msg) => warnings.push(msg);
+function captureWarnings(): string[] {
+	const warnings: string[] = [];
+	console.warn = (msg: string) => warnings.push(msg);
 	return warnings;
+}
+
+// The knobs the fixtures below turn. `width`/`height`/`rotation` are folded into
+// an `imageMediaMetadata` block; everything else is a raw field.
+interface FileExtras {
+	id?: string;
+	mimeType?: string;
+	description?: string;
+	modifiedTime?: string;
+	webContentLink?: string | undefined;
+	width?: number;
+	height?: number;
+	rotation?: number;
+	imageMediaMetadata?: ImageMediaMetadata | undefined;
 }
 
 // A raw `files.list` entry, with dimensions defaulting to a square so cases that
 // are not about ratios need not carry them.
-function file(name, extra = {}) {
+function file(name: string, extra: FileExtras = {}): DriveFile {
 	const { width = 1000, height = 1000, rotation, ...rest } = extra;
 	const id = rest.id ?? `id-${name}`;
 	return {
@@ -48,12 +64,33 @@ function file(name, extra = {}) {
 	};
 }
 
-// Answer every request with the same payload, recording what was asked for.
-function serve(payload, { ok = true, status = 200, statusText = "OK" } = {}) {
-	const requested = [];
-	const fetch = async (request) => {
+// `searchParams.get` is nullable and the assertions below want a string. Asking
+// for a parameter that is not there is a failure either way; this just says so
+// at the point it happens.
+function param(url: URL, name: string): string {
+	const value = url.searchParams.get(name);
+	assert.ok(value !== null, `no ${name} parameter in ${url}`);
+	return value;
+}
+
+// Answer every request with the same payload, recording what was asked for. The
+// responses are real `Response`s: the code reads `ok`, `status`, `headers` and
+// `json()`, and a fake of those four is a fake of the contract under test.
+function serve(
+	payload: unknown,
+	{
+		status = 200,
+		statusText = "OK",
+	}: { status?: number; statusText?: string } = {},
+) {
+	const requested: URL[] = [];
+	const fetch: FetchLike = async (request) => {
 		requested.push(new URL(request.url));
-		return { ok, status, statusText, json: async () => payload };
+		return new Response(JSON.stringify(payload), {
+			status,
+			statusText,
+			headers: { "content-type": "application/json" },
+		});
 	};
 	return { fetch, requested };
 }
@@ -221,7 +258,7 @@ test("the query scopes to the folder and excludes the trash — and nothing else
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
-	const q = requested[0].searchParams.get("q");
+	const q = param(requested[0], "q");
 	assert.match(q, /'folder-id' in parents/);
 	assert.match(q, /trashed = false/);
 	assert.ok(!q.includes("mimeType"), "no mimeType clause of its own");
@@ -233,7 +270,7 @@ test("imageMediaMetadata and webContentLink ride along on the listing call", asy
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
-	const fields = requested[0].searchParams.get("fields");
+	const fields = param(requested[0], "fields");
 	assert.match(fields, /imageMediaMetadata\(width,height,rotation\)/);
 	assert.match(fields, /webContentLink/);
 });
@@ -264,7 +301,7 @@ test("extraFields MERGE into the field list rather than replacing it", async () 
 		extraFields: ["thumbnailLink"],
 	});
 
-	const fields = requested[0].searchParams.get("fields");
+	const fields = param(requested[0], "fields");
 	assert.match(fields, /thumbnailLink/);
 	assert.match(fields, /imageMediaMetadata/, "the base fields survive");
 });
@@ -279,16 +316,13 @@ test("extraQuery is AND-ed onto the base q rather than replacing it", async () =
 		extraQuery: "name contains 'launch'",
 	});
 
-	const q = requested[0].searchParams.get("q");
+	const q = param(requested[0], "q");
 	assert.match(q, /name contains 'launch'/);
 	assert.match(q, /trashed = false/, "the base query survives");
 });
 
 test("throws on a non-OK response", async () => {
-	const { fetch } = serve(
-		{},
-		{ ok: false, status: 403, statusText: "Forbidden" },
-	);
+	const { fetch } = serve({}, { status: 403, statusText: "Forbidden" });
 
 	await assert.rejects(
 		() => listFiles({ folderId: FOLDER, auth, fetch }),
@@ -300,6 +334,7 @@ test("throws immediately when no auth was passed", async () => {
 	const { fetch } = serve({ files: [] });
 
 	await assert.rejects(
+		// @ts-expect-error — the omission the runtime guard exists for
 		() => listFiles({ folderId: FOLDER, fetch }),
 		/auth/i,
 		"the message has to name the constructors — this module reads no env",
@@ -309,13 +344,13 @@ test("throws immediately when no auth was passed", async () => {
 // ------------------------------------------------------------------ pagination
 
 // Serve the given pages in order, recording every URL asked for.
-function servePages(...pages) {
-	const requested = [];
+function servePages(...pages: unknown[]) {
+	const requested: URL[] = [];
 	let call = 0;
-	const fetch = async (request) => {
+	const fetch: FetchLike = async (request) => {
 		requested.push(new URL(request.url));
 		const page = pages[Math.min(call++, pages.length - 1)];
-		return { ok: true, status: 200, statusText: "OK", json: async () => page };
+		return Response.json(page);
 	};
 	return { fetch, requested };
 }
@@ -328,10 +363,7 @@ test("nextPageToken is in the field mask — without it the walk cannot happen",
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
-	assert.match(
-		requested[0].searchParams.get("fields"),
-		/^nextPageToken,files\(/,
-	);
+	assert.match(param(requested[0], "fields"), /^nextPageToken,files\(/);
 });
 
 test("follows nextPageToken and keeps every page's files", async () => {
@@ -374,14 +406,9 @@ test("throws rather than truncating when Drive repeats a pageToken", async () =>
 test("throws rather than paging forever past the cap", async () => {
 	let n = 0;
 	let calls = 0;
-	const fetch = async () => {
+	const fetch: FetchLike = async () => {
 		calls++;
-		return {
-			ok: true,
-			status: 200,
-			statusText: "OK",
-			json: async () => ({ files: [], nextPageToken: `token-${++n}` }),
-		};
+		return Response.json({ files: [], nextPageToken: `token-${++n}` });
 	};
 
 	await assert.rejects(
@@ -395,19 +422,21 @@ test("throws rather than paging forever past the cap", async () => {
 
 // A media response: bytes plus the headers the guard reads.
 function serveBytes(
-	body,
-	{ ok = true, status = 200, statusText = "OK", type = "image/jpeg" } = {},
+	body: string,
+	{
+		status = 200,
+		statusText = "OK",
+		type = "image/jpeg",
+	}: { status?: number; statusText?: string; type?: string } = {},
 ) {
-	const requested = [];
-	const fetch = async (request) => {
+	const requested: URL[] = [];
+	const fetch: FetchLike = async (request) => {
 		requested.push(new URL(request.url));
-		return {
-			ok,
+		return new Response(body, {
 			status,
 			statusText,
-			headers: new Headers({ "content-type": type }),
-			arrayBuffer: async () => new TextEncoder().encode(body).buffer,
-		};
+			headers: { "content-type": type },
+		});
 	};
 	return { fetch, requested };
 }
@@ -439,11 +468,7 @@ test("fetchBytes takes a whole Photo as happily as an id", async () => {
 });
 
 test("fetchBytes throws on a non-OK response", async () => {
-	const { fetch } = serveBytes("", {
-		ok: false,
-		status: 404,
-		statusText: "Not Found",
-	});
+	const { fetch } = serveBytes("", { status: 404, statusText: "Not Found" });
 
 	await assert.rejects(
 		() => fetchBytes({ id: "abc123" }, { auth, fetch }),
@@ -468,7 +493,11 @@ test("fetchBytes throws on the 200 text/html sign-in page", async () => {
 test("fetchBytes throws immediately when no auth was passed", async () => {
 	const { fetch } = serveBytes("BYTES");
 
-	await assert.rejects(() => fetchBytes({ id: "abc123" }, { fetch }), /auth/i);
+	await assert.rejects(
+		// @ts-expect-error — the omission the runtime guard exists for
+		() => fetchBytes({ id: "abc123" }, { fetch }),
+		/auth/i,
+	);
 });
 
 // ------------------------------------------------------------------ fetchPhotos

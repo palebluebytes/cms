@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { apiKey, bearer } from "../src/auth.js";
+import { apiKey, bearer } from "../src/auth.ts";
 
 // One type: an `Auth` is a function from Request to Request. Everything else in
 // this file is a consequence of that.
@@ -29,7 +29,9 @@ test("the request's method and headers survive authorisation", async () => {
 
 test("a missing key throws at construction, not on the first request", async () => {
 	// The alternative is `?key=undefined`, which Google answers with a 400 that
-	// says nothing about where the credential should have come from.
+	// says nothing about where the credential should have come from. The types
+	// say `string`; the caller this guard is for read an unset env var in JS.
+	// @ts-expect-error — deliberately calling it the way a JS caller can
 	assert.throws(() => apiKey(undefined), /key/i);
 	assert.throws(() => apiKey(""), /key/i);
 });
@@ -89,9 +91,11 @@ test("other headers survive, and a stale Authorization is replaced", async () =>
 });
 
 test("nothing to mint with throws — at construction, or when the factory returns nothing", async () => {
+	// @ts-expect-error — as above: the guard is for the caller the types miss
 	assert.throws(() => bearer(undefined), /token/i);
 	assert.throws(() => bearer(""), /token/i);
 	await assert.rejects(
+		// @ts-expect-error — a factory that mints nothing is a JS-shaped mistake
 		() => bearer(() => undefined)(new Request("https://example.test/a")),
 		/returned nothing/i,
 	);

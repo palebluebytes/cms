@@ -30,9 +30,11 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
-      # No install step: the package has zero runtime dependencies and the
-      # tests need neither network nor credentials.
-      - run: node --test "test/**/*.test.js"
+      # No install step, still: the package has zero runtime dependencies, the
+      # tests need neither network nor credentials, and Node runs the
+      # TypeScript itself by stripping the types (unflagged since 22.18 and
+      # 24.x — so a 22 here has to be a current 22, not 22.0).
+      - run: node --test "test/**/*.test.ts"
 
   format:
     runs-on: ubuntu-latest

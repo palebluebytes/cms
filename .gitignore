@@ -4,6 +4,11 @@ node_modules/
 # Ignore build tool output, e.g. code coverage
 coverage/
 
+# The compiled package. `tsc` regenerates it, `prepack` runs before publish, and
+# nothing in the repo reads it — the tests run the TypeScript directly.
+dist/
+*.tsbuildinfo
+
 # Ignore folders from source code editors
 .vscode
 .idea

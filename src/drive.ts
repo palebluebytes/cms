@@ -8,7 +8,10 @@
  * the README's "What this package does not do".
  */
 
-import { requireAuth } from "./internal/require-auth.js";
+// The type-only import says `.js` and the value import says `.ts`, deliberately:
+// see the note in `internal/require-auth.ts`.
+import type { Auth, FetchLike } from "./auth.js";
+import { requireAuth } from "./internal/require-auth.ts";
 
 // Everything a gallery needs, in ONE listing call. `imageMediaMetadata` rides
 // along with only an API key, so build-time aspect ratios cost no extra request
@@ -33,54 +36,116 @@ const PAGE_SIZE = 1000;
 const MAX_PAGES = 10;
 
 /**
- * A file, as this package hands it over.
- *
- * @typedef {object} Photo
- * @property {string} id Drive file id.
- * @property {string} name Filename, extension included, exactly as Drive has it.
- * @property {string} mimeType Always returned, NEVER filtered on — which types
- *   you show is a site decision, so pass `extraQuery` or filter the result.
- * @property {string} modifiedTime RFC3339. The only cache-busting input a
- *   consumer needs.
- * @property {string} description Drive's description field, trimmed; `""` when
- *   unset. The raw field, not the caption.
- * @property {string} caption Never empty: `description || name`. Guaranteed
- *   non-empty so a consumer can safely render `alt=""` and let a figcaption be
- *   the text alternative. Refining `name` into something prettier is a site
- *   convention and stays with the site.
- * @property {number|null} width DISPLAYED pixels — axes already swapped when the
- *   EXIF rotation is odd. `null` when Drive returns no `imageMediaMetadata`.
- * @property {number|null} height DISPLAYED pixels. See `width`.
- * @property {number} ratio DISPLAYED width/height. Falls back to 1 when
- *   dimensions are missing — which is why `ratio` is never null while
- *   `width`/`height` can be: a 1:1 fallback is a stated assumption a consumer
- *   can lay out against, whereas fabricated pixel counts would be a lie it
- *   cannot detect.
- * @property {number} rotation Quarter-turns clockwise as Drive reported them, 0
- *   when absent. Kept only so a consumer can tell a swap happened.
- * @property {string|undefined} url `webContentLink` — credential-free,
- *   permanent, deterministic from the id, and serves the byte-identical
- *   original.
- *
- *   READ THE PREDICATE: it resolves only for PUBLICLY SHARED files. Not "when
- *   you used an API key" — that is only accidentally true, because a key can
- *   never see anything else. A service-account consumer reading a private
- *   folder gets this field populated and it answers `200 text/html` with a
- *   sign-in page. `fetchBytes` is the path that always works; `url` is the
- *   optimisation that skips a download.
+ * Drive's `imageMediaMetadata`, in the STORED orientation. Every field is
+ * optional because Drive omits the block entirely for a non-image, and omits
+ * `rotation` for an image that carries no EXIF orientation.
  */
+export interface ImageMediaMetadata {
+	width?: number;
+	height?: number;
+	/** Quarter-turns clockwise. An ODD value means the axes are swapped. */
+	rotation?: number;
+}
 
 /**
- * @typedef {object} DriveOptions
- * @property {string} folderId
- * @property {import("./auth.js").Auth} auth Required.
- * @property {typeof fetch} [fetch] Defaults to the global. The integration-test
- *   seam; for unit tests prefer `normalisePhotos` and skip the network entirely.
- * @property {string[]} [extraFields] MERGED into the field list, never replacing
- *   it.
- * @property {string} [extraQuery] AND-ed onto the base `q`, never replacing it.
- * @property {number} [maxPages=10] Backstop on the page walk.
+ * A raw `files.list` entry under this package's field mask — the shape a
+ * checked-in fixture has, and what `normalisePhotos` interprets.
  */
+export interface DriveFile {
+	id: string;
+	name: string;
+	mimeType: string;
+	modifiedTime: string;
+	description?: string;
+	webContentLink?: string;
+	imageMediaMetadata?: ImageMediaMetadata;
+	/** Whatever `extraFields` asked for: the mask is the caller's to extend. */
+	[field: string]: unknown;
+}
+
+/** The raw `files.list` body, as `listFiles` hands it on. */
+export interface DriveFilesPayload {
+	files?: DriveFile[];
+	/**
+	 * Present only while the walk is in progress — `listFiles` exhausts it. It is
+	 * modelled here rather than cast in at the call site because leaving it out of
+	 * the field mask is the silent-truncation trap AGENTS.md is built around; a
+	 * type that does not mention it invites the same omission.
+	 */
+	nextPageToken?: string;
+}
+
+/** A file, as this package hands it over. */
+export interface Photo {
+	/** Drive file id. */
+	id: string;
+	/** Filename, extension included, exactly as Drive has it. */
+	name: string;
+	/**
+	 * Always returned, NEVER filtered on — which types you show is a site
+	 * decision, so pass `extraQuery` or filter the result.
+	 */
+	mimeType: string;
+	/** RFC3339. The only cache-busting input a consumer needs. */
+	modifiedTime: string;
+	/** Drive's description field, trimmed; `""` when unset. The raw field, not the caption. */
+	description: string;
+	/**
+	 * Never empty: `description || name`. Guaranteed non-empty so a consumer can
+	 * safely render `alt=""` and let a figcaption be the text alternative.
+	 * Refining `name` into something prettier is a site convention and stays
+	 * with the site.
+	 */
+	caption: string;
+	/**
+	 * DISPLAYED pixels — axes already swapped when the EXIF rotation is odd.
+	 * `null` when Drive returns no `imageMediaMetadata`.
+	 */
+	width: number | null;
+	/** DISPLAYED pixels. See `width`. */
+	height: number | null;
+	/**
+	 * DISPLAYED width/height. Falls back to 1 when dimensions are missing —
+	 * which is why `ratio` is never null while `width`/`height` can be: a 1:1
+	 * fallback is a stated assumption a consumer can lay out against, whereas
+	 * fabricated pixel counts would be a lie it cannot detect.
+	 */
+	ratio: number;
+	/**
+	 * Quarter-turns clockwise as Drive reported them, 0 when absent. Kept only
+	 * so a consumer can tell a swap happened.
+	 */
+	rotation: number;
+	/**
+	 * `webContentLink` — credential-free, permanent, deterministic from the id,
+	 * and serves the byte-identical original.
+	 *
+	 * READ THE PREDICATE: it resolves only for PUBLICLY SHARED files. Not "when
+	 * you used an API key" — that is only accidentally true, because a key can
+	 * never see anything else. A service-account consumer reading a private
+	 * folder gets this field populated and it answers `200 text/html` with a
+	 * sign-in page. `fetchBytes` is the path that always works; `url` is the
+	 * optimisation that skips a download.
+	 */
+	url: string | undefined;
+}
+
+export interface DriveOptions {
+	folderId: string;
+	/** Required. */
+	auth: Auth;
+	/**
+	 * Defaults to the global. The integration-test seam; for unit tests prefer
+	 * `normalisePhotos` and skip the network entirely.
+	 */
+	fetch?: FetchLike;
+	/** MERGED into the field list, never replacing it. */
+	extraFields?: string[];
+	/** AND-ed onto the base `q`, never replacing it. */
+	extraQuery?: string;
+	/** Backstop on the page walk. Defaults to 10. */
+	maxPages?: number;
+}
 
 /**
  * The raw `files.list` payload, paginated to exhaustion. Network, no
@@ -89,9 +154,6 @@ const MAX_PAGES = 10;
  * `orderBy=name` is set for a deterministic walk. That is transport
  * correctness, not presentation — the returned order carries no meaning and
  * consumers sort.
- *
- * @param {DriveOptions} options
- * @returns {Promise<{files: object[]}>}
  */
 export async function listFiles({
 	folderId,
@@ -100,7 +162,7 @@ export async function listFiles({
 	extraFields = [],
 	extraQuery,
 	maxPages = MAX_PAGES,
-}) {
+}: DriveOptions): Promise<{ files: DriveFile[] }> {
 	requireAuth(auth, "listFiles");
 
 	// The folder and the trash are all this package decides. WHICH files you want
@@ -111,8 +173,8 @@ export async function listFiles({
 	const clauses = [`'${folderId}' in parents`, "trashed = false"];
 	if (extraQuery) clauses.push(`(${extraQuery})`);
 
-	const files = [];
-	let pageToken;
+	const files: DriveFile[] = [];
+	let pageToken: string | undefined;
 
 	for (let page = 1; ; page++) {
 		if (page > maxPages) {
@@ -144,7 +206,7 @@ export async function listFiles({
 			);
 		}
 
-		const body = await res.json();
+		const body = (await res.json()) as DriveFilesPayload;
 		files.push(...(body.files ?? []));
 
 		if (!body.nextPageToken) break;
@@ -172,7 +234,10 @@ export async function listFiles({
  * Missing dimensions fall back to 1:1 with a warning rather than an error: never
  * fail a build, and never drop a file, over metadata Google chose not to send.
  */
-function displayDimensions(meta, name) {
+function displayDimensions(
+	meta: ImageMediaMetadata | undefined,
+	name: string,
+): Pick<Photo, "width" | "height" | "ratio"> {
 	const w = meta?.width;
 	const h = meta?.height;
 
@@ -183,7 +248,7 @@ function displayDimensions(meta, name) {
 		return { width: null, height: null, ratio: 1 };
 	}
 
-	const swap = (meta.rotation ?? 0) % 2 !== 0;
+	const swap = (meta?.rotation ?? 0) % 2 !== 0;
 	const width = swap ? h : w;
 	const height = swap ? w : h;
 	return { width, height, ratio: width / height };
@@ -194,12 +259,12 @@ function displayDimensions(meta, name) {
  *
  * This is the seam to feed checked-in JSON through: a `files.list` body saved to
  * a fixture goes straight in, so a test exercises every line of interpretation
- * without faking a `Response`.
- *
- * @param {{files?: object[]}} payload
- * @returns {Photo[]}
+ * without faking a `Response`. `null` and `undefined` are accepted for the same
+ * reason — a fixture that read as nothing comes back as `[]`, not a crash.
  */
-export function normalisePhotos(payload) {
+export function normalisePhotos(
+	payload: DriveFilesPayload | null | undefined,
+): Photo[] {
 	return (payload?.files ?? []).map((file) => {
 		const description = (file.description || "").trim();
 		return {
@@ -225,11 +290,8 @@ export function normalisePhotos(payload) {
  * also exactly what a folder that stopped being shared looks like, so if YOUR
  * folder is never legitimately empty, check for `[]` and throw — see the
  * README's error policy.
- *
- * @param {DriveOptions} options
- * @returns {Promise<Photo[]>}
  */
-export async function fetchPhotos(options) {
+export async function fetchPhotos(options: DriveOptions): Promise<Photo[]> {
 	return normalisePhotos(await listFiles(options));
 }
 
@@ -241,6 +303,9 @@ export async function fetchPhotos(options) {
  * set on an `anyone` permission), and `thumbnailLink` is not a stable src: it
  * changes on every metadata call.
  *
+ * Takes anything carrying an `id`, so a whole `Photo` goes in as happily as
+ * `{ id }`.
+ *
  * RETURNS `Uint8Array`, NOT `Buffer`. `Buffer` is Node-only and this package
  * targets any JS runtime. The consequence a Node consumer must know:
  * **eleventy-img tests `Buffer.isBuffer(src)`**
@@ -248,15 +313,14 @@ export async function fetchPhotos(options) {
  * plain `Uint8Array`, so pass
  * `Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)` — a view, not
  * a copy.
- *
- * @param {Photo | {id: string}} photo
- * @param {Pick<DriveOptions, "auth" | "fetch">} options
- * @returns {Promise<Uint8Array>}
  */
 export async function fetchBytes(
-	photo,
-	{ auth, fetch: fetchImpl = globalThis.fetch },
-) {
+	photo: { id: string },
+	{
+		auth,
+		fetch: fetchImpl = globalThis.fetch,
+	}: Pick<DriveOptions, "auth" | "fetch">,
+): Promise<Uint8Array> {
 	requireAuth(auth, "fetchBytes");
 
 	const request = await auth(
