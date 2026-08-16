@@ -11,7 +11,7 @@ code; this file is only the traps.
 
 No `node:` imports, no `Buffer`, no `process.env`, no dependencies in `/drive` or
 `/calendar`. `fetch`, `Request`, `Headers`, `URL`, `Uint8Array` and WebCrypto are
-the whole toolbox — all of them native on Node 18+, Deno, Bun and Workers.
+the whole toolbox — all of them native on Node 22+, Deno, Bun and Workers.
 
 Reaching for `node:crypto` or `Buffer` does not fail here; it fails in a
 consumer's edge build, which is the one place nobody runs these tests.
@@ -102,12 +102,13 @@ the tool release-plz was ported from. Two workflows, one config pair:
 Push to `main` → release-please updates the release PR. Merge it → it tags,
 creates the GitHub release, and only then does the publish job run.
 
-### CI tests 22 and 24, but `engines` claims `>=18`
+### The CI matrix and `engines` must stay in step
 
-The matrix floor is 22 because 18 and 20 are end-of-life and the `npm test`
-glob does not run on them. So the two oldest runtimes the package advertises
-are the two nothing verifies — an `engines` bump or a runner change is a
-decision someone still has to make, not a gap CI will report.
+`engines` says `>=22` and CI tests 22 and 24 — every advertised runtime is
+verified, which is the property worth keeping. Widening `engines` without
+adding the matching matrix entry breaks nothing here and everything in a
+consumer's install; the same is true of README and `src/auth.js`, which state
+the floor in prose.
 
 ### Never hand-edit a version
 

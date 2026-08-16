@@ -20,9 +20,8 @@ jobs:
       fail-fast: false
       matrix:
         # The package targets any JS runtime, so the floor matters more than
-        # the ceiling. 18 and 20 are both past end-of-life and the `npm test`
-        # glob does not run on them — but `engines` still claims >=18, so this
-        # matrix does not prove that claim. See AGENTS.md.
+        # the ceiling. This must cover everything `engines` advertises — it
+        # says >=22, so 22 is the floor here. See AGENTS.md.
         node-version: [22, 24]
     steps:
       - uses: actions/checkout@v7

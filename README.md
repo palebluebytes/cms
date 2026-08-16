@@ -10,7 +10,7 @@ them when it builds. That is the whole idea.
 pnpm add @palebluebytes/google-cms
 ```
 
-Runs on **Node 18+, Deno, Bun and edge runtimes** (Workers, Vercel). It uses
+Runs on **Node 22+, Deno, Bun and edge runtimes** (Workers, Vercel). It uses
 `fetch`, `Request` and `Uint8Array` and nothing else — no `node:` imports, no
 `Buffer`, no `process.env`.
 

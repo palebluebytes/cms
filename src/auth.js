@@ -7,7 +7,7 @@
  * function and never touches the constructors below.
  *
  * A `Request` rather than `(url, init)` because it is the one
- * credential-carrying object present in every target runtime — Node 18+, Deno,
+ * credential-carrying object present in every target runtime — Node 22+, Deno,
  * Bun, Workers — and it holds url and headers together, so an implementation can
  * put the credential in either.
  *
