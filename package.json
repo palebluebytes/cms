@@ -1,0 +1,39 @@
+{
+	"name": "@palebluebytes/google-cms",
+	"version": "0.1.0",
+	"description": "Use google services as a CMS system",
+	"type": "module",
+	"license": "MIT",
+	"author": "Pale Blue Bytes",
+	"exports": {
+		"./drive": "./src/drive.js",
+		"./calendar": "./src/calendar.js",
+		"./auth": "./src/auth.js",
+		"./package.json": "./package.json"
+	},
+	"files": [
+		"src"
+	],
+	"engines": {
+		"node": ">=18"
+	},
+	"scripts": {
+		"test": "node --test \"test/**/*.test.js\"",
+		"format": "prettier --write ."
+	},
+	"keywords": [
+		"google-drive",
+		"google-calendar",
+		"static-site-generator",
+		"build-time",
+		"eleventy",
+		"astro",
+		"gallery",
+		"aspect-ratio",
+		"zero-dependency"
+	],
+	"devDependencies": {
+		"prettier": "^3.6.2"
+	},
+	"packageManager": "pnpm@10.12.1"
+}

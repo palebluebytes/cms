@@ -1,0 +1,19 @@
+# Ignore installed npm modules
+node_modules/
+
+# Ignore build tool output, e.g. code coverage
+coverage/
+
+# Ignore folders from source code editors
+.vscode
+.idea
+
+# Ignore build outputs from performing a nix-build or `nix build` command
+result
+result-*
+
+# Ignore automatically generated direnv output
+.direnv
+
+# Scratch space for design notes and working files
+.scratch/
