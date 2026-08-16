@@ -23,7 +23,12 @@
             # is fine — this tracks the version the maintainer develops on.
             pkgs.nodejs_24
 
-            # Matches the `packageManager` major pinned in package.json.
+            # Must match `packageManager` in package.json *exactly*. pnpm 10
+            # self-manages: on a mismatch it downloads the pinned version to
+            # ~/.local/share/pnpm and runs that instead of this one, quietly
+            # putting the package manager outside the nix store. Bumping
+            # nixpkgs can move pnpm_10, so re-check both after `nix flake
+            # update`.
             pkgs.pnpm_10
 
             # The engineering skills in docs/agents/ shell out to `gh` for
