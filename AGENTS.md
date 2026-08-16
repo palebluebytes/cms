@@ -16,6 +16,52 @@ the whole toolbox — all of them native on Node 22+, Deno, Bun and Workers.
 Reaching for `node:crypto` or `Buffer` does not fail here; it fails in a
 consumer's edge build, which is the one place nobody runs these tests.
 
+`tsconfig.json` sets `"types": []` so that `src` cannot see `@types/node` at all:
+`Buffer`, `process` and `node:` imports are compile errors rather than review
+findings. Adding `"node"` to the root config takes that guard away and nothing
+goes red.
+
+**The compiler only guards the Node half.** `"lib": ["es2023", "dom"]` is there
+for `fetch`/`Request`/`Headers`/`URL`/`console`, and it brings `document`,
+`localStorage` and `window` with them — every bit as absent from Workers and Deno
+Deploy as `Buffer` is, and every bit as clean at compile time. Replacing `dom`
+with hand-written ambients would close it, at the cost of a mini `lib.dom` to
+maintain and extend for every platform API a future `serviceAccount` needs. Until
+someone does that, browser-only globals are caught by reading the diff, not by
+`tsc`.
+
+`test/tsconfig.json` adds `"types": ["node"]` back — but note that its program
+pulls in the `src` files the tests import, so `src` is typechecked WITHOUT the
+guard there. `pnpm typecheck` runs the root config first for exactly that reason;
+reversing the order, or running only `tsc -p test`, silently drops the guard.
+
+## TypeScript ships as JavaScript
+
+`src/*.ts` is the input; `dist/` — plain ESM plus `.d.ts` — is the package. No
+consumer ever compiles a file of ours, which is the same audience argument as
+above: a `.ts` in the export map would demand a TypeScript toolchain from an
+Eleventy or Workers build that has none.
+
+Consequences that bite quietly:
+
+- **`dist/` is not committed and not present after a fresh clone.** `prepack`
+  runs `tsc`, so `pnpm publish` builds it — but any CI job that publishes must
+  install dependencies first, or `prepack` fails on a missing compiler.
+- **Node strips types; it does not check them.** `npm test` runs the `.ts`
+  sources directly (type stripping, unflagged since Node 22.18 and 24.x), which
+  means a green test run says nothing about whether the package compiles. The
+  `typecheck` job in CI is the only thing that reads the types.
+- **Value imports inside `src` and `test` carry `.ts` extensions, type-only
+  imports carry `.js`.** The `.ts` is what lets Node run the sources unbuilt, and
+  `rewriteRelativeImportExtensions` turns those into `.js` on the way into
+  `dist`. It does NOT rewrite a type-only import, which survives verbatim into
+  the emitted `.d.ts` — write `import type … from "./auth.ts"` and the published
+  declarations point at a `.ts` file that does not ship. Node erases type-only
+  imports entirely, so the `.js` there costs nothing at runtime.
+- **`erasableSyntaxOnly` is on.** No `enum`, no `namespace`, no constructor
+  parameter properties: type stripping erases, it does not transform, so
+  anything that needs emitted code has no way to exist.
+
 ## `fetchBytes` returns `Uint8Array`, and eleventy-img will not take it
 
 `@11ty/eleventy-img` tests `Buffer.isBuffer(src)` (`src/image.js:135`), which is
@@ -50,7 +96,7 @@ returns `undefined`, deliberately.
 `fields=files(...)` omits `nextPageToken`, and the page walk then stops after one
 page. A folder of 1500 files silently becomes 1000, with no error anywhere. The
 mask is built as `nextPageToken,files(...)` and
-`test/drive.test.js` pins it.
+`test/drive.test.ts` pins it.
 
 ## Google's defaults are wrong in three specific ways
 
@@ -81,9 +127,14 @@ structured data one day out of step with the visible page.
 ## Tests need neither network nor credentials
 
 Both transports take `fetch` as an option and the normalisers are pure, so every
-test is a plain function call. `npm test` is `node --test` with no fixtures
-directory, no mock server and no key. Keep it that way: a test that needs a
-credential is a test nobody runs.
+test is a plain function call. `npm test` is `node --test` over the `.ts` sources
+with no fixtures directory, no mock server and no key. Keep it that way: a test
+that needs a credential is a test nobody runs.
+
+The `fetch` doubles answer with real `Response` objects rather than a literal
+carrying `ok`/`json`. `ok` derived from a status, a real `Headers`, a real
+`arrayBuffer()` — a hand-rolled stand-in gets to agree with whatever the code
+happens to read, which is the one thing a transport test must not do.
 
 ## Releases are release-please's, not yours
 
@@ -92,12 +143,12 @@ merging it is the act of releasing. release-plz itself is cargo-only, so the
 implementation is [release-please](https://github.com/googleapis/release-please),
 the tool release-plz was ported from. Two workflows, one config pair:
 
-| File                            | Owns                                                        |
-| ------------------------------- | ----------------------------------------------------------- |
-| `.github/workflows/ci.yml`      | Tests on Node 22 and 24, plus a Prettier check, on every PR |
-| `.github/workflows/release.yml` | The release PR, and the publish that follows merging it     |
-| `release-please-config.json`    | Release type, changelog sections, pre-1.0 bumping           |
-| `.release-please-manifest.json` | **The** current version                                     |
+| File                            | Owns                                                         |
+| ------------------------------- | ------------------------------------------------------------ |
+| `.github/workflows/ci.yml`      | Tests on Node 22 and 24, plus typecheck and Prettier, per PR |
+| `.github/workflows/release.yml` | The release PR, and the publish that follows merging it      |
+| `release-please-config.json`    | Release type, changelog sections, pre-1.0 bumping            |
+| `.release-please-manifest.json` | **The** current version                                      |
 
 Push to `main` → release-please updates the release PR. Merge it → it tags,
 creates the GitHub release, and only then does the publish job run.
@@ -107,8 +158,12 @@ creates the GitHub release, and only then does the publish job run.
 `engines` says `>=22` and CI tests 22 and 24 — every advertised runtime is
 verified, which is the property worth keeping. Widening `engines` without
 adding the matching matrix entry breaks nothing here and everything in a
-consumer's install; the same is true of README and `src/auth.js`, which state
+consumer's install; the same is true of README and `src/auth.ts`, which state
 the floor in prose.
+
+`engines` describes the runtime the **published** `dist` needs, which is any
+Node 22. Running the tests needs 22.18, where type stripping stopped being a
+flag — a distinction worth keeping straight before "raising the floor" to match.
 
 ### Never hand-edit a version
 
@@ -163,11 +218,14 @@ GitHub Packages refuses to republish a version that already exists. There is no
 `--force` and deleting-then-republishing is blocked too. A bad publish is fixed
 only by releasing another version.
 
-### `files` decides what ships, and it is `["src"]`
+### `files` decides what ships, and it is `["dist", "src"]`
 
-Anything a consumer needs at runtime must live under `src/`. Add a runtime file
-anywhere else and the tests still pass, the publish still succeeds, and the
-tarball is missing it — the failure surfaces in a consumer's build.
+`dist` is what runs; `src` rides along only so the `.js.map` and `.d.ts.map`
+files resolve to real sources in a consumer's debugger and editor. Anything a
+consumer needs at runtime must therefore be reachable from a compiled `dist`
+module. Add a runtime file outside `src/`, or an export map entry pointing
+anywhere but `dist`, and the tests still pass, the publish still succeeds, and
+the tarball is missing it — the failure surfaces in a consumer's build.
 
 ### `publishConfig.registry` is the only thing aiming at GitHub
 

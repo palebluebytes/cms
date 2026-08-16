@@ -14,6 +14,10 @@ Runs on **Node 22+, Deno, Bun and edge runtimes** (Workers, Vercel). It uses
 `fetch`, `Request` and `Uint8Array` and nothing else — no `node:` imports, no
 `Buffer`, no `process.env`.
 
+Written in TypeScript and published as plain ESM with type declarations, so a
+JavaScript consumer needs no build step and a TypeScript one needs no
+`@types/` package.
+
 ---
 
 ## Entry points
@@ -40,8 +44,8 @@ export default () =>
 
 ## Auth is one type
 
-```js
-/** @typedef {(request: Request) => Request | Promise<Request>} Auth */
+```ts
+type Auth = (request: Request) => Request | Promise<Request>;
 ```
 
 A `Request` in, an authorised `Request` out. Everything reduces to it, including
@@ -153,6 +157,10 @@ Unguarded, that HTML gets cached as image bytes and fails somewhere far away.
 | `fetch`       | Your own fetch — the integration-test seam, or a pre-authed one |
 | `maxPages`    | Backstop on the page walk (default 10 × 1000 files)             |
 
+`fetch` is typed as `FetchLike` — `(request: Request) => Promise<Response>` —
+because that is all this package ever calls. The global satisfies it, and so does
+a two-line double that records the `Request` it was handed.
+
 Both merges are deliberate inversions of `@localnerve/google-drive-folder`, whose
 field list is a hard-coded literal with no passthrough — so build-time aspect
 ratios are simply unreachable — and whose `fileQuery` _replaces_ its
@@ -178,17 +186,20 @@ const events = await fetchEvents({ calendarId, auth });
 
 ### `CalendarEvent`
 
-| Field         | Type                | Notes                                                |
-| ------------- | ------------------- | ---------------------------------------------------- |
-| `id`          | string              |                                                      |
-| `summary`     | string              |                                                      |
-| `description` | string              | `""` when unset                                      |
-| `location`    | string              | `""` when unset                                      |
-| `isAllDay`    | boolean             |                                                      |
-| `isMultiDay`  | boolean             | Computed **after** the inclusive-end correction      |
-| `start`       | string              | ISO — see below                                      |
-| `end`         | string              | ISO, **inclusive** — see below                       |
-| `timeZone`    | string \| undefined | Event's own, else the calendar's, else **undefined** |
+| Field         | Type                | Notes                                                  |
+| ------------- | ------------------- | ------------------------------------------------------ |
+| `id`          | string              |                                                        |
+| `summary`     | string \| undefined | `undefined` for an untitled event — Google omits it    |
+| `description` | string              | `""` when unset                                        |
+| `location`    | string              | `""` when unset                                        |
+| `isAllDay`    | boolean             |                                                        |
+| `isMultiDay`  | boolean             | Computed **after** the inclusive-end correction        |
+| `start`       | string              | ISO — see below                                        |
+| `end`         | string \| undefined | ISO, **inclusive** — `undefined` if Google sent no end |
+| `timeZone`    | string \| undefined | Event's own, else the calendar's, else **undefined**   |
+
+Events Google sends with no usable `start` — and cancelled ones — are dropped,
+so `start` is always a string on an event you get back.
 
 **Strings, not `Date`s.** An all-day event is a _floating_ date: it has no
 instant, and `new Date("2026-05-13")` invents one at UTC midnight. `isAllDay`
@@ -282,9 +293,15 @@ returns `[]`.
 ## Testing
 
 ```bash
-pnpm install   # prettier, the only devDependency
-npm test       # node --test, no network, no key
+npm test         # node --test over the .ts sources; no install, no network, no key
+pnpm install     # prettier, typescript, @types/node — dev only, nothing ships
+pnpm typecheck   # tsc; type stripping runs the tests, it does not check them
+pnpm build       # tsc → dist/, which is what publishing ships
 ```
+
+Node runs the TypeScript directly by stripping the types, so the test command
+needs nothing installed — but it also never typechecks, which is why `typecheck`
+is its own step here and its own job in CI.
 
 ## Licence
 
