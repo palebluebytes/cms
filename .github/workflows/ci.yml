@@ -36,6 +36,24 @@ jobs:
       # 24.x — so a 22 here has to be a current 22, not 22.0).
       - run: node --test "test/**/*.test.ts"
 
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - run: pnpm install --frozen-lockfile
+
+      # Type stripping does not typecheck — it deletes the types and runs what
+      # is left, so a test suite can be green on code that does not compile.
+      # This job is the only thing that reads the types at all.
+      - run: pnpm run typecheck
+
   format:
     runs-on: ubuntu-latest
     steps:
