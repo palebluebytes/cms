@@ -127,6 +127,11 @@ test("the calendar id is escaped into the path, and the auth applied", async () 
 
 // ---------------------------------------------------------------- pagination
 
+// The walk itself — the cap, a repeated token, a non-OK page — is
+// `internal/page-walk.ts` and is tested in `test/page-walk.test.ts`. What
+// belongs here is that this transport keeps every page it is handed, and takes
+// the calendar's zone off the first one.
+
 test("follows nextPageToken and keeps every page's events", async () => {
 	const { fetch, requested } = serve(
 		{
@@ -156,63 +161,7 @@ test("follows nextPageToken and keeps every page's events", async () => {
 	assert.equal(timeZone, "Europe/London");
 });
 
-test("throws rather than truncating when the API repeats a pageToken", async () => {
-	// A token that hands back itself would loop forever; stopping quietly would
-	// drop the tail, which is the bug this whole file guards.
-	const { fetch } = serve({
-		timeZone: "Europe/London",
-		items: [event("Looping", "2099-03-04T19:00:00+00:00")],
-		nextPageToken: "same-token",
-	});
-
-	await assert.rejects(
-		() => listEvents({ calendarId: CALENDAR, auth, fetch }),
-		/pageToken/,
-	);
-});
-
-test("throws rather than paging forever past the cap", async () => {
-	// An unbounded recurring series expands without end once singleEvents is on.
-	let n = 0;
-	const fetch: FetchLike = async () =>
-		Response.json({
-			timeZone: "Europe/London",
-			items: [event(`Instance ${n}`, "2099-03-04T19:00:00+00:00")],
-			nextPageToken: `token-${++n}`,
-		});
-
-	await assert.rejects(
-		() => listEvents({ calendarId: CALENDAR, auth, fetch }),
-		/too many pages/i,
-	);
-});
-
-test("maxPages is a caller's backstop, not a fixed one", async () => {
-	let n = 0;
-	let calls = 0;
-	const fetch: FetchLike = async () => {
-		calls++;
-		return Response.json({ items: [], nextPageToken: `token-${++n}` });
-	};
-
-	await assert.rejects(
-		() => listEvents({ calendarId: CALENDAR, auth, fetch, maxPages: 2 }),
-		/too many pages/i,
-	);
-	assert.equal(calls, 2, "it stops after the caller's cap, not the default");
-});
-
 // ------------------------------------------------------------------ failures
-
-test("throws on a non-OK events.list response", async () => {
-	const fetch: FetchLike = async () =>
-		new Response("{}", { status: 403, statusText: "Forbidden" });
-
-	await assert.rejects(
-		() => listEvents({ calendarId: CALENDAR, auth, fetch }),
-		/403/,
-	);
-});
 
 test("throws immediately when no auth was passed", async () => {
 	const { fetch } = serve({ items: [] });

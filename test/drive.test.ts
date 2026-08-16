@@ -321,15 +321,6 @@ test("extraQuery is AND-ed onto the base q rather than replacing it", async () =
 	assert.match(q, /trashed = false/, "the base query survives");
 });
 
-test("throws on a non-OK response", async () => {
-	const { fetch } = serve({}, { status: 403, statusText: "Forbidden" });
-
-	await assert.rejects(
-		() => listFiles({ folderId: FOLDER, auth, fetch }),
-		/403/,
-	);
-});
-
 test("throws immediately when no auth was passed", async () => {
 	const { fetch } = serve({ files: [] });
 
@@ -342,6 +333,11 @@ test("throws immediately when no auth was passed", async () => {
 });
 
 // ------------------------------------------------------------------ pagination
+
+// The walk itself — the cap, a repeated token, a non-OK page — is
+// `internal/page-walk.ts` and is tested in `test/page-walk.test.ts`. What
+// belongs here is what Drive gets wrong: the mask that makes the walk possible
+// at all, and that this transport keeps every page it is handed.
 
 // Serve the given pages in order, recording every URL asked for.
 function servePages(...pages: unknown[]) {
@@ -389,33 +385,6 @@ test("asks for the largest page the API allows", async () => {
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
 	assert.equal(requested[0].searchParams.get("pageSize"), "1000");
-});
-
-test("throws rather than truncating when Drive repeats a pageToken", async () => {
-	const { fetch } = servePages({
-		files: [file("1 - a.jpg")],
-		nextPageToken: "same-token",
-	});
-
-	await assert.rejects(
-		() => listFiles({ folderId: FOLDER, auth, fetch }),
-		/pageToken/,
-	);
-});
-
-test("throws rather than paging forever past the cap", async () => {
-	let n = 0;
-	let calls = 0;
-	const fetch: FetchLike = async () => {
-		calls++;
-		return Response.json({ files: [], nextPageToken: `token-${++n}` });
-	};
-
-	await assert.rejects(
-		() => listFiles({ folderId: FOLDER, auth, fetch, maxPages: 3 }),
-		/too many pages/i,
-	);
-	assert.equal(calls, 3, "it stops at the caller's cap, not the default");
 });
 
 // ------------------------------------------------------------------ fetchBytes
