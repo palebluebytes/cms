@@ -18,6 +18,19 @@ Written in TypeScript and published as plain ESM with type declarations, so a
 JavaScript consumer needs no build step and a TypeScript one needs no
 `@types/` package.
 
+## Installing from GitHub Packages
+
+This package is published to GitHub Packages, which requires authentication to
+_install_ even though the repo is public. Without it the install fails with a
+bare 401 that reads like the package doesn't exist.
+
+Create a token with the `read:packages` scope, then an `.npmrc`:
+
+```
+@palebluebytes:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
 ---
 
 ## Entry points
@@ -293,7 +306,7 @@ returns `[]`.
 ## Testing
 
 ```bash
-npm test         # node --test over the .ts sources; no install, no network, no key
+pnpm test        # node --test over the .ts sources; no install, no network, no key
 pnpm install     # prettier, typescript, @types/node — dev only, nothing ships
 pnpm typecheck   # tsc; type stripping runs the tests, it does not check them
 pnpm build       # tsc → dist/, which is what publishing ships
