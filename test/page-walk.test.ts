@@ -162,19 +162,14 @@ test("throws on a 200 that is not JSON, naming the page and the content-type", a
 		type: "text/html; charset=UTF-8",
 	});
 
-	await assert.rejects(
-		() => walk({ fetch }),
-		(error: unknown) => {
-			assert.ok(error instanceof Error);
-			assert.match(
-				error.message,
-				/the folder walk could not read page 1 as JSON/i,
-			);
-			assert.match(error.message, /content-type was text\/html; charset=UTF-8/);
-			// The parse failure is kept as the cause: provenance for a human, not a
-			// code to branch on — see docs/adr/0001-errors-carry-messages-not-codes.md.
-			assert.ok(error.cause instanceof Error);
-			return true;
-		},
-	);
+	// The parse failure is kept as the error's `cause`, and deliberately NOT
+	// asserted: pinning its shape would make it something this package has
+	// undertaken to keep, which is what
+	// docs/adr/0001-errors-carry-messages-not-codes.md refuses. The message is the
+	// interface.
+	await assert.rejects(() => walk({ fetch }), {
+		message:
+			"The folder walk could not read page 1 as JSON — the content-type was " +
+			"text/html; charset=UTF-8. Whatever answered, it was not a listing.",
+	});
 });

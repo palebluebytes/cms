@@ -16,6 +16,12 @@ and what to do about it, and why each transport supplies its own sentence
 explaining its own cap. Tests assert against message text, and rewording a
 message is therefore a test-visible change rather than a free edit.
 
+An error's `cause` is not a code and is not covered by this. It carries
+provenance for whoever is reading a stack — the `SyntaxError` behind a page that
+would not parse, say — and nothing here promises which errors have one or what it
+holds. A test that asserted its shape would turn it into exactly the stable,
+branchable thing this decision refuses, so none does.
+
 Worth reopening if a consumer ever needs to retry one failure and not the
 others — a transient 503 versus a folder that stopped being shared is the case
 that would make it real.

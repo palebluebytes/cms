@@ -99,8 +99,7 @@ export async function* pages<Body extends { nextPageToken?: string }>(
 			const type = response.headers.get("content-type") || "absent";
 			throw new Error(
 				`The ${label} walk could not read page ${page} as JSON — the ` +
-					`content-type was ${type}. A 200 that is not a listing usually ` +
-					`means something between you and Google answered instead of it.`,
+					`content-type was ${type}. Whatever answered, it was not a listing.`,
 				{ cause },
 			);
 		}
