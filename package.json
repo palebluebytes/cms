@@ -1,6 +1,6 @@
 {
 	"name": "@palebluebytes/cms",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Read a Drive folder, a Google Calendar or any .ics URL at build time, as a CMS for a static site",
 	"type": "module",
 	"license": "MIT",
