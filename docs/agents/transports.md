@@ -6,14 +6,22 @@ The traps are here.
 
 ## One directory per resource, one file per provider
 
-`src/calendar/google.ts` and `src/files/google.ts`, each reachable as its own
-entry point (`/calendar/google`, `/files/google`). A directory is one resource and
-the files in it are interchangeable implementations of it, which is what makes
-"every provider in `src/calendar/` passes the same test file" a sentence that
-means something — [`ADR-0004`](../adr/0004-a-resource-may-have-more-than-one-provider.md).
+`src/calendar/{google,ics}.ts` and `src/files/google.ts`, each reachable as its
+own entry point (`/calendar/google`, `/calendar/ics`, `/files/google`). A
+directory is one resource and the files in it are interchangeable implementations
+of it — [`ADR-0004`](../adr/0004-a-resource-may-have-more-than-one-provider.md).
 
-Both providers are Google's today, so nothing yet enforces the interchangeability
-the layout implies. A `dist` path in the export map, not a `src` one: see
+**What enforces the interchangeability is `test/calendar/conformance.ts`**, which
+both calendar providers run against one logical calendar. Adding a provider means
+encoding that calendar in its format and calling the suite; a provider that does
+not call it is not held to anything.
+
+`src/calendar/shared.ts` holds what belongs to the MEDIUM rather than a vendor —
+the inclusive-end correction and the day arithmetic under it. A provider that
+reimplements one of those disagrees with the other by a day and no test outside
+the conformance suite would notice.
+
+A `dist` path in the export map, not a `src` one: see
 [`typescript-build.md`](typescript-build.md).
 
 ## The two transports mirror each other on purpose
@@ -46,10 +54,12 @@ the whole testing story rests on.
 
 A `console.warn` is the one that got in, precisely because it is none of those
 four — it lived in `displayDimensions` until
-[`ADR-0002`](../adr/0002-the-normalisers-report-nothing.md). Neither normaliser
-reports anything now, and each has a test that fails if it starts: `recordConsole`
-from `test/support/console.ts`, once in `test/files/google.test.ts` and once in
-`test/calendar/google.test.ts`.
+[`ADR-0002`](../adr/0002-the-normalisers-report-nothing.md). No normaliser reports
+anything now, and each of the three has a test that fails if it starts:
+`recordConsole` from `test/support/console.ts`, in
+`test/files/google.test.ts`, `test/calendar/google.test.ts` and
+`test/calendar/ics.test.ts`. A new provider without one is a normaliser nothing
+holds to silence.
 
 ## The page walk is one module, and it is not in the transports
 
@@ -110,8 +120,17 @@ An all-day `start`/`end` is `YYYY-MM-DD` with no instant. `new Date()` on one
 invents UTC midnight, which is a real date in a real zone and therefore a lie
 that renders as a spurious time — or, west of UTC, the day before.
 
-The only `Date` in the calendar half is inside `inclusiveEnd`, as arithmetic
-scaffolding on a UTC-pinned string; it never escapes.
+Every `Date` in the calendar half is scaffolding, and none of them escapes:
+`addDays` in `shared.ts` (which `inclusiveEnd` is made of), the month and weekday
+stepping in `internal/recurrence.ts`, and the window comparison in `ics.ts`.
+
+The rule is not "no `Date`". It is that a `Date` may only be built from a string
+that **already names an instant** — one carrying `Z` or an offset — or from a
+date-only string this package pinned to UTC itself. What must never happen is a
+`Date` built from a WALL TIME, which is why `ics.ts` compares a `"floating"` or
+`"zoned"` event against the window as text and only an `"instant"` as a moment.
+Putting a wall time through `Date` reads it in the build machine's zone, and
+nothing downstream can tell.
 
 `kind` carries this to a consumer, and it has four arms because RFC 5545 has four
 time forms ([`ADR-0005`](../adr/0005-an-events-time-is-a-kind-not-a-boolean.md)).
@@ -126,3 +145,54 @@ A 13th-to-16th event arrives ending on the **17th**. `normaliseEvents` steps it
 back so `end` means the same thing for every event. Consumers that emit
 `schema.org` `endDate` want the corrected value; leaving it exclusive puts the
 structured data one day out of step with the visible page.
+
+## The `.ics` provider's own traps
+
+### Unfolding removes the line break AND one whitespace character
+
+RFC 5545 §3.1 folds a long line by inserting a break followed by a single space
+or tab, and unfolding removes both. A space belonging to the value is therefore
+written twice by whoever folded it. Removing only the break inserts a space into
+every long `DESCRIPTION` in the file; not unfolding at all is worse — the tail of
+the value becomes a property name nobody asked about and the value is silently
+truncated. Pinned in `test/calendar/ics-parse.test.ts`.
+
+### Components are a stack, not a flag
+
+`VALARM` nests inside `VEVENT` and carries its own `DESCRIPTION` and `TRIGGER`. A
+flat "am I inside an event" test reads the alarm's text as the event's, which
+renders as an event whose description is "Reminder".
+
+### Expansion moves the date, never the time of day
+
+`internal/recurrence.ts` recurs by stepping the DATE part and carrying the time
+part along verbatim. That is what lets a floating or zoned series recur at all
+without resolving a zone — "weekly at 19:00" means the 19:00 the file wrote.
+Reaching for a `Date` on the whole value would silently convert a wall time
+through the build machine's zone.
+
+### Under-expanding must throw, and does
+
+An `RRULE` part the expander does not implement (`BYMONTHDAY`, `BYSETPOS`, an
+ordinal `BYDAY`, a sub-daily `FREQ`) throws rather than returning the instances it
+did understand. Half a series missing renders as a calendar that is merely quiet.
+The supported subset is `DAILY`/`WEEKLY`/`MONTHLY`/`YEARLY` with `INTERVAL`,
+`COUNT`, `UNTIL`, plain `BYDAY` and `WKST`, plus `EXDATE` and `RECURRENCE-ID`.
+
+### An unbounded series needs a window, and will not invent one
+
+No `COUNT`, no `UNTIL` and no `to` throws. Choosing "now" would put a clock inside
+a normaliser and make a build's output depend on when it ran.
+
+### A private calendar answers `200 text/html`
+
+The same trap as `fetchBytes` on the Drive side: a missing or stale credential
+gets a sign-in page, served cheerfully. Parsing it finds no `VEVENT` and would
+return `[]` — a calendar that reads as empty rather than unreadable. `listEvents`
+refuses a `text/html` body for exactly that reason.
+
+### `MONTHLY` skips a missing day rather than clamping it
+
+31 January monthly has no February instance, and 29 February yearly skips common
+years — 2100 among them, by the century rule. Clamping to the 28th would invent an
+instance on a day the rule never named.

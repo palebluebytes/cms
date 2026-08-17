@@ -1,7 +1,9 @@
 # AGENTS.md
 
-Zero-dependency package that reads a Google Drive folder and a Google Calendar at
-build time, for static site generators.
+Zero-dependency package that reads a folder of files or a calendar at build time,
+for static site generators. A Google Drive folder, a Google Calendar, or any
+`.ics` URL — one **resource** read through one **provider**, and `CONTEXT.md`
+defines both words.
 
 Package manager is **pnpm**. Usage and rationale live in [`README.md`](README.md)
 and in comments beside the code; the files below carry only the **traps** —

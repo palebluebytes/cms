@@ -21,6 +21,10 @@
 			"types": "./dist/calendar/google.d.ts",
 			"default": "./dist/calendar/google.js"
 		},
+		"./calendar/ics": {
+			"types": "./dist/calendar/ics.d.ts",
+			"default": "./dist/calendar/ics.js"
+		},
 		"./auth": {
 			"types": "./dist/auth.d.ts",
 			"default": "./dist/auth.js"

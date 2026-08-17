@@ -1,7 +1,8 @@
 # @palebluebytes/google-cms
 
-Use Google services as a CMS. Read a **Drive folder** or a **Calendar** at build
-time, get back data a page can render — no client, no ceremony, no dependencies.
+Use the tools your client already has as a CMS. Read a **Drive folder**, a
+**Google Calendar** or **any `.ics` URL** at build time, and get back data a page
+can render — no client, no ceremony, no dependencies.
 
 Your client edits a shared Drive folder and their own calendar; your site reads
 them when it builds. That is the whole idea.
@@ -42,13 +43,20 @@ want:
 ```
 @palebluebytes/google-cms/files/google       fetchPhotos · listFiles · normalisePhotos · fetchBytes
 @palebluebytes/google-cms/calendar/google    fetchEvents · listEvents · normaliseEvents
+@palebluebytes/google-cms/calendar/ics       fetchEvents · listEvents · normaliseEvents
 @palebluebytes/google-cms/auth               apiKey · bearer
 ```
 
 The provider is chosen by the import path and by nothing else — there is no
 registry and no `{ provider }` option, because a site knows at build time which
-backend it reads. Both providers are Google's today; see
+backend it reads. Swapping `calendar/google` for `calendar/ics` changes the import
+and the options; the events you get back are the same shape, and one test suite
+holds both providers to that. See
 [`ADR-0004`](docs/adr/0004-a-resource-may-have-more-than-one-provider.md).
+
+**The files half is Google's.** The calendar half is provider-neutral and two
+implementations demonstrate it; `files/` is structured so a second provider slots
+in, which is a claim about shape and not a property anything proves yet.
 
 Every operation is reachable in a **single expression**, deliberately: an
 Eleventy `_data/*.js` module may export only `default`, and a module that has to
@@ -325,6 +333,64 @@ is merely how Google satisfies it for free —
 
 ---
 
+## `/calendar/ics`
+
+```js
+import { fetchEvents } from "@palebluebytes/google-cms/calendar/ics";
+
+const events = await fetchEvents({ url: "https://…/basic.ics" });
+```
+
+The same `CalendarEvent[]`, from any calendar system at all. Every one of them
+exports `.ics` — Google, Apple, Outlook, Nextcloud, Fastmail — so this is the way
+to read a calendar with **no OAuth, no API key and no Google account**: paste the
+secret address.
+
+| Option  |                                                                                     |
+| ------- | ----------------------------------------------------------------------------------- |
+| `url`   | The `.ics` address. For a private calendar this _is_ the credential                 |
+| `auth`  | **Optional.** For an export behind Basic auth, such as a private Nextcloud calendar |
+| `fetch` | Your own fetch — the integration-test seam                                          |
+| `from`  | The window, exactly as on the Google side                                           |
+| `to`    | As `from` — and **required** for a never-ending recurring series                    |
+
+### What it does that the Google provider does not
+
+**It expands recurrence itself.** There is no server to ask, so the `RRULE` is
+expanded here, honouring `EXDATE` and `RECURRENCE-ID` overrides. Supported:
+`DAILY`/`WEEKLY`/`MONTHLY`/`YEARLY` with `INTERVAL`, `COUNT`, `UNTIL`, and a plain
+`BYDAY`. Anything else — `BYMONTHDAY`, `BYSETPOS`, an ordinal `BYDAY` like `2MO` —
+**throws**, rather than handing back the instances it did understand. Half a
+series missing renders as a calendar that is merely quiet.
+
+**A never-ending series needs `to`.** `FREQ=WEEKLY` with no `COUNT` and no `UNTIL`
+has nothing to expand into, and this package will not choose "now" for you — that
+would put a clock in a pure function and make your build's output depend on when
+it ran.
+
+```js
+// Throws: "…never ends, and no window was given to expand it into."
+await fetchEvents({ url });
+
+// Fine.
+await fetchEvents({ url, to: "2027-01-01T00:00:00Z" });
+```
+
+**All four `kind`s can appear here**, unlike from Google. A file may carry a wall
+time with no zone (`"floating"`) or a wall time in a named zone (`"zoned"`), and
+neither is an instant. This is the provider the four-way `kind` exists for.
+
+**`timeZone` comes from `TZID`, then `X-WR-TIMEZONE`** — the latter being
+non-standard, and what Google's own `.ics` export writes. Neither is guaranteed
+IANA: Outlook writes `W. Europe Standard Time`.
+
+**It refuses a `200 text/html`.** A private calendar with a missing or stale
+credential answers with a sign-in page, cheerfully. Parsing it would find no
+`VEVENT` and hand back `[]` — a calendar that reads as empty rather than as
+unreadable.
+
+---
+
 ## What this package does not do
 
 **No sorting, no filtering, no formatting, no future/past partition.** Not an
@@ -335,13 +401,18 @@ at the exact point they are most worth testing.
 
 ## Transport, normaliser, composition
 
-Each half is three functions:
+Every provider is three functions:
 
 ```js
 listFiles(options)   → Promise<rawPayload>    network, no interpretation
 normalisePhotos(raw) → Photo[]                pure: no network, no clock, no env
 fetchPhotos(options) → Promise<Photo[]>       the two together
 ```
+
+The `.ics` provider is the same three under the same names — its raw payload is
+the file as text, and its normaliser takes the window as a second argument,
+because a file cannot be asked for a subset the way an API can. Providers agree
+on what they **return**; the arguments are each one's own.
 
 The middle one is why your tests need no fixtures library and no faked
 `Response`. Save a real `files.list` body to a JSON file, and:
@@ -363,7 +434,10 @@ result.** A build-time tool has no sensible degraded mode: a green build carryin
 silently wrong data is the failure mode worth designing against.
 
 Throws on `!res.ok`, a repeated `pageToken`, `maxPages` exceeded, missing `auth`,
-and a payload that contradicts what was asked for (media that answers `text/html`).
+a payload that contradicts what was asked for (media — or a calendar — that
+answers `text/html`), an iCalendar date or `DURATION` that cannot be read, an
+`RRULE` part the expander does not implement, and a never-ending series with no
+window to expand into.
 
 Does **not** throw on an empty folder or an empty calendar — `fetchPhotos`
 returns `[]`.

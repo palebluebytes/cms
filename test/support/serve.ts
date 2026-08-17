@@ -79,6 +79,36 @@ export function serveBytes(
 	return { fetch, requested };
 }
 
+export interface ServeTextOptions extends ServeOptions {
+	/** Defaults to `text/calendar`. The header the ics transport reads. */
+	contentType?: string;
+}
+
+/**
+ * Answer with a text document — an `.ics` file, or the sign-in page a private
+ * calendar sends instead of one.
+ *
+ * `serveBytes` under a name that fits: an `.ics` body is the same "not JSON"
+ * case, and one `Response`-building helper is easier to keep honest than two.
+ */
+export function serveText(
+	documents: string[],
+	{ contentType = "text/calendar", ...rest }: ServeTextOptions = {},
+): Served {
+	const requested: URL[] = [];
+	let call = 0;
+
+	const fetch: FetchLike = async (request) => {
+		const document = documents[Math.min(call++, documents.length - 1)] ?? "";
+		const served = serveBytes(document, { ...rest, type: contentType });
+		const response = await served.fetch(request);
+		requested.push(...served.requested);
+		return response;
+	};
+
+	return { fetch, requested };
+}
+
 /**
  * Answer every request with a page carrying a FRESH token, forever. A walk
  * against this one can only end at its cap — which is the point: an unbounded
