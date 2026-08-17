@@ -127,6 +127,13 @@ photos lay out as landscape. `width`/`height` are nullable and `ratio` is not:
 the 1:1 fallback is a stated assumption you can lay out against, whereas
 fabricated pixel counts would be a lie you could not detect.
 
+Nothing is logged when dimensions are missing — whether that is worth mentioning
+during a build is yours to decide, and the returned data already says so:
+
+```js
+const undimensioned = photos.filter((p) => p.width === null).map((p) => p.name);
+```
+
 **`caption` is never empty**, so you can safely render `alt=""` and let a
 figcaption be the text alternative. Refining `name` into something pretty —
 stripping a numeric prefix, swapping separators for spaces — is a site

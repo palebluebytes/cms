@@ -100,7 +100,8 @@ export interface Photo {
 	caption: string;
 	/**
 	 * DISPLAYED pixels — axes already swapped when the EXIF rotation is odd.
-	 * `null` when Drive returns no `imageMediaMetadata`.
+	 * `null` whenever Drive did not send usable dimensions: the
+	 * `imageMediaMetadata` block absent, present but empty, or either value zero.
 	 */
 	width: number | null;
 	/** DISPLAYED pixels. See `width`. */
@@ -216,22 +217,20 @@ export async function listFiles({
  * `rotation` is quarter-turns clockwise, so an ODD rotation SWAPS THE AXES. Two
  * lines of code, and the thing most consumers of this API get wrong.
  *
- * Missing dimensions fall back to 1:1 with a warning rather than an error: never
- * fail a build, and never drop a file, over metadata Google chose not to send.
+ * Missing dimensions fall back to 1:1 rather than an error: never fail a build,
+ * and never drop a file, over metadata Google chose not to send.
  */
 function displayDimensions(
 	meta: ImageMediaMetadata | undefined,
-	name: string,
 ): Pick<Photo, "width" | "height" | "ratio"> {
 	const w = meta?.width;
 	const h = meta?.height;
 
-	if (!w || !h) {
-		console.warn(
-			`[google-cms] no image dimensions from Drive, assuming 1:1: ${name}`,
-		);
-		return { width: null, height: null, ratio: 1 };
-	}
+	// Nothing is reported here, deliberately. `width: null` already tells the
+	// caller exactly what a log line would, and whether a file without dimensions
+	// is worth mentioning is the site's decision — see
+	// `docs/adr/0002-the-normalisers-report-nothing.md`.
+	if (!w || !h) return { width: null, height: null, ratio: 1 };
 
 	const swap = (meta?.rotation ?? 0) % 2 !== 0;
 	const width = swap ? h : w;
@@ -259,7 +258,7 @@ export function normalisePhotos(
 			modifiedTime: file.modifiedTime,
 			description,
 			caption: description || file.name,
-			...displayDimensions(file.imageMediaMetadata, file.name),
+			...displayDimensions(file.imageMediaMetadata),
 			rotation: file.imageMediaMetadata?.rotation ?? 0,
 			url: file.webContentLink,
 		};

@@ -1,4 +1,4 @@
-import test, { afterEach } from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 
 import { apiKey } from "../src/auth.ts";
@@ -16,18 +16,6 @@ import { serve, serveBytes } from "./support/serve.ts";
 // `fetch` as an option, so nothing here touches `globalThis.fetch` or the
 // network — and `normalisePhotos` is pure, so the interesting half needs no seam
 // at all.
-
-const realWarn = console.warn;
-
-afterEach(() => {
-	console.warn = realWarn;
-});
-
-function captureWarnings(): string[] {
-	const warnings: string[] = [];
-	console.warn = (msg: string) => warnings.push(msg);
-	return warnings;
-}
 
 // The knobs the fixtures below turn. `width`/`height`/`rotation` are folded into
 // an `imageMediaMetadata` block; everything else is a raw field.
@@ -124,9 +112,7 @@ test("width and height are the DISPLAYED pixels, swapped with the axes", () => {
 	);
 });
 
-test("missing dimensions fall back to a 1:1 ratio with a warning, never a failure", () => {
-	const warnings = captureWarnings();
-
+test("missing dimensions fall back to a 1:1 ratio, never a failure", () => {
 	const photos = normalisePhotos({
 		files: [
 			file("no-metadata.jpg", { imageMediaMetadata: undefined }),
@@ -141,14 +127,11 @@ test("missing dimensions fall back to a 1:1 ratio with a warning, never a failur
 	assert.equal(photos[1].ratio, 1);
 	assert.equal(photos[2].ratio, 1);
 	assert.equal(photos[3].ratio, 2);
-	assert.equal(warnings.length, 3, "one warning per photo without dimensions");
-	assert.ok(warnings.every((w) => w.includes("assuming 1:1")));
 });
 
 test("width and height are null when dimensions are missing, but ratio never is", () => {
 	// Fabricating pixel counts would be a lie the consumer cannot detect; a 1:1
 	// ratio is a stated fallback it can lay out against.
-	captureWarnings();
 	const [photo] = normalisePhotos({
 		files: [file("no-metadata.jpg", { imageMediaMetadata: undefined })],
 	});
@@ -159,7 +142,6 @@ test("width and height are null when dimensions are missing, but ratio never is"
 });
 
 test("caption is never empty: the description, else the filename", () => {
-	captureWarnings();
 	const photos = normalisePhotos({
 		files: [
 			file("1 - x.jpg", { description: "  My caption  " }),
