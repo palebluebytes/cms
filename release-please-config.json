@@ -3,7 +3,7 @@
 	"packages": {
 		".": {
 			"release-type": "node",
-			"package-name": "@palebluebytes/google-cms",
+			"package-name": "@palebluebytes/cms",
 			"changelog-path": "CHANGELOG.md",
 			"include-component-in-tag": false,
 			"bump-minor-pre-major": true,

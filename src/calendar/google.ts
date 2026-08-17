@@ -7,7 +7,7 @@
  * not do".
  *
  * Nothing here assumes the files half is in use, either: a calendar-only
- * consumer never imports `@palebluebytes/google-cms/files/google`.
+ * consumer never imports `@palebluebytes/cms/files/google`.
  */
 
 // `.js` on the type-only import, `.ts` on the value import: see the note in

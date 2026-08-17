@@ -41,7 +41,7 @@ Two traps bear on every change:
 
 ## Working the repo
 
-- **Issues** live as GitHub issues on `palebluebytes/google-cms`, driven through
+- **Issues** live as GitHub issues on `palebluebytes/cms`, driven through
   the `gh` CLI: [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md)
 - **Triage labels** are the five canonical strings, unrenamed: `needs-triage`,
   `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`.

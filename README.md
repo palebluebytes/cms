@@ -1,4 +1,4 @@
-# @palebluebytes/google-cms
+# @palebluebytes/cms
 
 Use the tools your client already has as a CMS. Read a **Drive folder**, a
 **Google Calendar** or **any `.ics` URL** at build time, and get back data a page
@@ -8,7 +8,7 @@ Your client edits a shared Drive folder and their own calendar; your site reads
 them when it builds. That is the whole idea.
 
 ```bash
-pnpm add @palebluebytes/google-cms
+pnpm add @palebluebytes/cms
 ```
 
 Runs on **Node 22+, Deno, Bun and edge runtimes** (Workers, Vercel). It uses
@@ -41,10 +41,10 @@ files, a calendar — read through one **provider**, and you import the pairing 
 want:
 
 ```
-@palebluebytes/google-cms/files/google       fetchPhotos · listFiles · normalisePhotos · fetchBytes
-@palebluebytes/google-cms/calendar/google    fetchEvents · listEvents · normaliseEvents
-@palebluebytes/google-cms/calendar/ics       fetchEvents · listEvents · normaliseEvents
-@palebluebytes/google-cms/auth               apiKey · bearer
+@palebluebytes/cms/files/google       fetchPhotos · listFiles · normalisePhotos · fetchBytes
+@palebluebytes/cms/calendar/google    fetchEvents · listEvents · normaliseEvents
+@palebluebytes/cms/calendar/ics       fetchEvents · listEvents · normaliseEvents
+@palebluebytes/cms/auth               apiKey · bearer
 ```
 
 The provider is chosen by the import path and by nothing else — there is no
@@ -63,8 +63,8 @@ Eleventy `_data/*.js` module may export only `default`, and a module that has to
 construct a client first cannot be one expression.
 
 ```js
-import { fetchPhotos } from "@palebluebytes/google-cms/files/google";
-import { apiKey } from "@palebluebytes/google-cms/auth";
+import { fetchPhotos } from "@palebluebytes/cms/files/google";
+import { apiKey } from "@palebluebytes/cms/auth";
 
 export default () =>
   fetchPhotos({ folderId: "…", auth: apiKey(process.env.GOOGLE_KEY) });
@@ -124,7 +124,7 @@ screen. `jose` has zero dependencies and runs everywhere this package does.
 
 ```js
 import { importPKCS8, SignJWT } from "jose";
-import { bearer } from "@palebluebytes/google-cms/auth";
+import { bearer } from "@palebluebytes/cms/auth";
 
 // Cached across the build: one exchange, not one per request. `expires_in` is a
 // second-count, and the minute of slack keeps a long build off the boundary.
@@ -390,7 +390,7 @@ is merely how Google satisfies it for free —
 ## `/calendar/ics`
 
 ```js
-import { fetchEvents } from "@palebluebytes/google-cms/calendar/ics";
+import { fetchEvents } from "@palebluebytes/cms/calendar/ics";
 
 const events = await fetchEvents({ url: "https://…/basic.ics" });
 ```

@@ -25,7 +25,7 @@ export function requireAuth(
 	if (typeof auth !== "function") {
 		throw new Error(
 			`${caller}() needs an \`auth\` option — pass apiKey(key) or ` +
-				`bearer(token) from "@palebluebytes/google-cms/auth", or any ` +
+				`bearer(token) from "@palebluebytes/cms/auth", or any ` +
 				`function from Request to authorised Request.`,
 		);
 	}

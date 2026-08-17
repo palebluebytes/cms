@@ -1,13 +1,13 @@
 {
-	"name": "@palebluebytes/google-cms",
+	"name": "@palebluebytes/cms",
 	"version": "0.2.0",
-	"description": "Use google services as a CMS system",
+	"description": "Read a Drive folder, a Google Calendar or any .ics URL at build time, as a CMS for a static site",
 	"type": "module",
 	"license": "MIT",
 	"author": "Pale Blue Bytes",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/palebluebytes/google-cms.git"
+		"url": "git+https://github.com/palebluebytes/cms.git"
 	},
 	"publishConfig": {
 		"registry": "https://npm.pkg.github.com"
@@ -49,6 +49,8 @@
 	"keywords": [
 		"google-drive",
 		"google-calendar",
+		"ics",
+		"icalendar",
 		"static-site-generator",
 		"build-time",
 		"eleventy",

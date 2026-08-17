@@ -1,8 +1,9 @@
-# google-cms
+# cms
 
-Reading a Google Drive folder and a Google Calendar at build time, for static
-site generators. This is the glossary; the traps live in
-[`AGENTS.md`](AGENTS.md) and the usage in [`README.md`](README.md).
+Reading a folder of files or a calendar at build time, for static site
+generators — a Google Drive folder, a Google Calendar, or any `.ics` URL. This is
+the glossary; the traps live in [`AGENTS.md`](AGENTS.md) and the usage in
+[`README.md`](README.md).
 
 ## Language
 

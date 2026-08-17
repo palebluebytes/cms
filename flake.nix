@@ -1,5 +1,5 @@
 {
-  description = "Development shell for @palebluebytes/google-cms";
+  description = "Development shell for @palebluebytes/cms";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 

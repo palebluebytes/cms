@@ -99,6 +99,30 @@ different audience, and a package name that isn't yours to take. The scope must
 also stay lowercase and equal to the GitHub owner (`@palebluebytes` ↔
 `palebluebytes`); GitHub Packages rejects any other pairing.
 
+### `repository.url` names a repo that does not exist yet
+
+The package is `@palebluebytes/cms` and `repository.url` says
+`github.com/palebluebytes/cms`, but **the GitHub repo is still named
+`google-cms`.** GitHub Packages associates a package with a repository through
+that field, so **the repo has to be renamed before anything is published under
+the new name.** Renaming it afterwards is the harder order: a published version
+can never be replaced.
+
+Both halves of the rename are one act — see
+[`ADR-0004`](../adr/0004-a-resource-may-have-more-than-one-provider.md).
+
+### The version starts at 0.1.0 because the NAME is new
+
+`@palebluebytes/google-cms` reached `0.2.0`. `@palebluebytes/cms` has never been
+published, so `.release-please-manifest.json` says `0.1.0` and should.
+
+This matters at exactly one moment: merging a branch that predates the old
+package's `0.2.0` release commit produces a conflict in `package.json` and the
+manifest, and the tempting resolution — "take the higher number" — is the wrong
+one here. `0.2.0` would tag and publish a first release that claims a history the
+new name does not have. Nothing warns you; the changelog simply starts in the
+middle.
+
 ### Consumers need a token even though the repo is public
 
 GitHub Packages requires authentication to _install_, public or not, and the
