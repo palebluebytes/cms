@@ -141,6 +141,30 @@ test("width and height are null when dimensions are missing, but ratio never is"
 	assert.equal(photo.ratio, 1);
 });
 
+test("normalisePhotos has no effect other than its return value", () => {
+	// `console` is in `lib.dom` and therefore compiles clean inside `src`, so this
+	// test is the only thing standing between the pure half and a log line — the
+	// shape of trap AGENTS.md is built around. It mutates a global to ENFORCE the
+	// seam, which is the opposite of the `captureWarnings` helper it replaced.
+	// See `docs/adr/0002-the-normalisers-report-nothing.md`.
+	const methods = ["warn", "log", "error", "info", "debug"] as const;
+	const real = methods.map((method) => console[method]);
+	const called: string[] = [];
+
+	for (const method of methods) console[method] = () => called.push(method);
+
+	try {
+		// The path that used to warn: a file Drive sent no dimensions for.
+		normalisePhotos({
+			files: [file("no-metadata.jpg", { imageMediaMetadata: undefined })],
+		});
+	} finally {
+		methods.forEach((method, i) => (console[method] = real[i]));
+	}
+
+	assert.deepEqual(called, [], "the normaliser reached for the console");
+});
+
 test("caption is never empty: the description, else the filename", () => {
 	const photos = normalisePhotos({
 		files: [
