@@ -15,6 +15,7 @@
 import type { Auth, FetchLike } from "../auth.js";
 import { pages } from "../internal/page-walk.ts";
 import { requireAuth } from "../internal/require-auth.ts";
+import type { CalendarEvent } from "./shared.js";
 
 // 2500 is the API's ceiling; its DEFAULT is 250, which is the size of the tail a
 // growing calendar loses to a single un-paginated request.
@@ -64,50 +65,12 @@ export interface EventsPayload {
 }
 
 /**
- * An event, as this package hands it over.
- *
- * DATES ARE STRINGS, NOT `Date`s. An all-day event is a FLOATING date — it has
- * no instant, and `new Date("2026-05-13")` invents one at UTC midnight.
- * `isAllDay` tells a consumer which form it is holding:
- *
- *   isAllDay true  → `YYYY-MM-DD`      (floating; do NOT construct a Date)
- *   isAllDay false → RFC3339 + offset  (an instant; `new Date()` is safe)
- *
- * They also sort correctly as strings, which is the one thing every consumer
- * does with them.
+ * The resource's own type, re-exported so a consumer of this provider needs one
+ * import path rather than two. It is defined in `./shared.ts` because it belongs
+ * to the calendar resource and not to Google — a second provider that imported
+ * it from here would make this file its dependency.
  */
-export interface CalendarEvent {
-	id: string;
-	/**
-	 * `undefined` for an untitled event — Google omits `summary` entirely for
-	 * one, and inventing a title here would be the site's decision, not this
-	 * package's.
-	 */
-	summary: string | undefined;
-	/** `""` when unset. */
-	description: string;
-	/** `""` when unset. */
-	location: string;
-	isAllDay: boolean;
-	/**
-	 * True when the span covers more than one calendar day, computed AFTER the
-	 * inclusive-end correction.
-	 */
-	isMultiDay: boolean;
-	start: string;
-	/**
-	 * INCLUSIVE. Google's all-day `end.date` is EXCLUSIVE — a 13th-to-16th event
-	 * arrives ending on the 17th — and this is stepped back, so `end` means the
-	 * same thing whether or not the event is all-day. `undefined` only if Google
-	 * sent no end at all.
-	 */
-	end: string | undefined;
-	/**
-	 * The event's own zone, else the calendar's, else `undefined`. NEVER a
-	 * default: a fallback zone is the consumer's truth, not this package's.
-	 */
-	timeZone: string | undefined;
-}
+export type { CalendarEvent, EventKind } from "./shared.js";
 
 export interface CalendarOptions {
 	calendarId: string;
@@ -227,8 +190,8 @@ export function normaliseEvents(
 		const { id, summary, description, location, start, end } = event;
 
 		// All-day events use `date` (YYYY-MM-DD); timed events use `dateTime`, so
-		// having a `dateTime` is what "timed" MEANS — read once, and both the
-		// drop below and `isAllDay` follow from it.
+		// having a `dateTime` is what "timed" MEANS — read once, and the drop
+		// below, the `kind` and the inclusive-end correction all follow from it.
 		const timedStart = start?.dateTime;
 		const startAt = timedStart || start?.date;
 
@@ -245,7 +208,11 @@ export function normaliseEvents(
 				summary,
 				description: description ?? "",
 				location: location ?? "",
-				isAllDay: !timedStart,
+				// Only two of the four kinds are reachable from this API. A
+				// `dateTime` from Google always carries an offset, so a timed event
+				// is always an instant, and Google has no form that hands back a
+				// wall time — a provider reading a file gets the other two.
+				kind: timedStart ? "instant" : "date",
 				// Compare calendar days only. Both strings carry their own day in
 				// their first ten characters — a timed one in the offset Google
 				// returned it in — so this needs no zone and no clock.

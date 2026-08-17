@@ -104,7 +104,7 @@ what breaks when one is dropped is here.
 | `orderBy=startTime` | unset            | A non-deterministic page walk (and the API accepts it only with `singleEvents`) |
 | `maxResults`        | 250              | A single un-paginated request that drops the tail, silently                     |
 
-## All-day dates are floating
+## All-day dates are floating, and `kind` is the only thing that says so
 
 An all-day `start`/`end` is `YYYY-MM-DD` with no instant. `new Date()` on one
 invents UTC midnight, which is a real date in a real zone and therefore a lie
@@ -112,6 +112,13 @@ that renders as a spurious time — or, west of UTC, the day before.
 
 The only `Date` in the calendar half is inside `inclusiveEnd`, as arithmetic
 scaffolding on a UTC-pinned string; it never escapes.
+
+`kind` carries this to a consumer, and it has four arms because RFC 5545 has four
+time forms ([`ADR-0005`](../adr/0005-an-events-time-is-a-kind-not-a-boolean.md)).
+**This provider can only ever produce two of them** — `"date"` and `"instant"` —
+because Google's `dateTime` always carries an offset. Widening that to a wall
+time, or narrowing `kind` back to a boolean because two arms look unused, breaks
+the file-reading providers the type exists for and nothing here would fail.
 
 ## Google's all-day `end.date` is exclusive
 

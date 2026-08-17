@@ -234,12 +234,14 @@ test("only `cancelled` drops an event — an unfamiliar status is kept", () => {
 	);
 });
 
-test("a timed event keeps its offset and is not all-day", () => {
+test("a timed event keeps its offset and is an instant", () => {
 	const [e] = normaliseEvents({
 		items: [event("Reading", "2099-03-04T19:00:00+00:00")],
 	});
 
-	assert.equal(e.isAllDay, false);
+	// "instant" and not merely "timed": Google's `dateTime` always carries an
+	// offset, which is what makes the string safe to hand to `new Date()`.
+	assert.equal(e.kind, "instant");
 	assert.equal(e.start, "2099-03-04T19:00:00+00:00");
 	assert.equal(e.end, "2099-03-04T19:00:00+00:00");
 	assert.equal(e.isMultiDay, false);
@@ -264,7 +266,7 @@ test("an all-day event's end is stepped back to the INCLUSIVE last day", () => {
 		],
 	});
 
-	assert.equal(festival.isAllDay, true);
+	assert.equal(festival.kind, "date");
 	assert.equal(festival.start, "2099-06-13");
 	assert.equal(festival.end, "2099-06-16");
 	assert.equal(festival.isMultiDay, true);

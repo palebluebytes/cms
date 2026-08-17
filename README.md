@@ -234,40 +234,56 @@ const events = await fetchEvents({ calendarId, auth });
 
 ### `CalendarEvent`
 
-| Field         | Type                | Notes                                                  |
-| ------------- | ------------------- | ------------------------------------------------------ |
-| `id`          | string              |                                                        |
-| `summary`     | string \| undefined | `undefined` for an untitled event — Google omits it    |
-| `description` | string              | `""` when unset                                        |
-| `location`    | string              | `""` when unset                                        |
-| `isAllDay`    | boolean             |                                                        |
-| `isMultiDay`  | boolean             | Computed **after** the inclusive-end correction        |
-| `start`       | string              | ISO — see below                                        |
-| `end`         | string \| undefined | ISO, **inclusive** — `undefined` if Google sent no end |
-| `timeZone`    | string \| undefined | Event's own, else the calendar's, else **undefined**   |
+| Field         | Type                | Notes                                                 |
+| ------------- | ------------------- | ----------------------------------------------------- |
+| `id`          | string              |                                                       |
+| `summary`     | string \| undefined | `undefined` for an untitled event — Google omits it   |
+| `description` | string              | `""` when unset                                       |
+| `location`    | string              | `""` when unset                                       |
+| `kind`        | EventKind           | Which time form `start`/`end` hold — read this first  |
+| `isMultiDay`  | boolean             | Computed **after** the inclusive-end correction       |
+| `start`       | string              | See `kind`                                            |
+| `end`         | string \| undefined | **Inclusive** — `undefined` if the source sent no end |
+| `timeZone`    | string \| undefined | Event's own, else the calendar's, else **undefined**  |
 
 Events Google sends with no usable `start` — and cancelled ones — are dropped,
 so `start` is always a string on an event you get back.
 
-**Strings, not `Date`s.** An all-day event is a _floating_ date: it has no
-instant, and `new Date("2026-05-13")` invents one at UTC midnight. `isAllDay`
-tells you which form you hold:
+**Strings, not `Date`s, and `kind` says which kind of string.** There are four
+time forms in calendar interchange and **only one of them is an instant**:
 
 ```
-isAllDay true  → "2026-05-13"                 floating; do NOT construct a Date
-isAllDay false → "2026-05-13T19:00:00+01:00"  an instant; new Date() is safe
+kind: "date"     → "2026-05-13"                 a floating DAY  — no instant
+kind: "floating" → "2026-05-13T19:00:00"        a wall TIME     — no zone at all
+kind: "zoned"    → "2026-05-13T19:00:00"        a wall time IN `timeZone`
+kind: "instant"  → "2026-05-13T19:00:00+01:00"  an instant      — new Date() is safe
 ```
 
-They also sort correctly as strings, which is the one thing every consumer does
-with them.
+`new Date()` on any of the first three invents whatever the runtime's zone
+happens to be — for a `"date"`, UTC midnight, which renders as a spurious time
+or, west of UTC, as the day before.
 
-**`end` is the inclusive last day.** Google's all-day `end.date` is exclusive — a
-13th-to-16th event arrives ending on the 17th — and this steps it back, so `end`
-means the same thing whether or not the event is all-day. Remember to use the
-corrected value in your `schema.org` `endDate` too.
+**Google only ever returns `"date"` and `"instant"`**, because its `dateTime`
+always carries an offset. The other two exist for providers reading a file
+written by some other client, and they are the reason this is a four-way `kind`
+rather than the boolean it used to be —
+[ADR-0005](docs/adr/0005-an-events-time-is-a-kind-not-a-boolean.md).
+
+They sort correctly as strings only **within one kind and one offset**. Two
+instants written in different offsets sort wrongly as text; Google hides that by
+answering in the calendar's zone throughout.
+
+**`end` is the inclusive last day.** An all-day end arrives exclusive from every
+calendar system worth reading — Google's `end.date` and RFC 5545's `DTEND` both
+name the day _after_ the last, so a 13th-to-16th event arrives ending on the 17th
+— and this steps it back, so `end` means the same thing whatever the `kind`.
+Remember to use the corrected value in your `schema.org` `endDate` too.
 
 **`timeZone` is `undefined` rather than defaulted.** Your site's fallback zone is
-your truth, not this package's.
+your truth, not this package's. It is also **not guaranteed to be an IANA name** —
+it is whatever the source said, and Outlook writes Windows zone names like
+`W. Europe Standard Time`. Google's are IANA; validate if you accept calendars
+from elsewhere.
 
 ### What the transport always sets
 

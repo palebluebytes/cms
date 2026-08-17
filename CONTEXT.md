@@ -48,8 +48,8 @@ _Avoid_: pagination, paging, page loop
 Which of RFC 5545's four time forms an event's `start` and `end` hold, and
 therefore what a consumer may safely do with them: `"date"`, `"floating"`,
 `"zoned"`, `"instant"`. Only the last is an instant —
-[`ADR-0005`](docs/adr/0005-an-events-time-is-a-kind-not-a-boolean.md), decided and
-not yet written.
+[`ADR-0005`](docs/adr/0005-an-events-time-is-a-kind-not-a-boolean.md). Google's
+provider reaches only the first and the last.
 _Avoid_: `isAllDay` as a concept — it named only the first form and implied the
 other three were instants.
 
