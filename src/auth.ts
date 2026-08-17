@@ -90,15 +90,24 @@ export function bearer(
 	};
 }
 
-// NO `serviceAccount` YET — deliberately.
+// NO `serviceAccount` — deliberately, and now for a surveyed reason.
 //
-// A service-account JWT minter (WebCrypto RS256, ~40 lines) is the obvious
-// third constructor, and the reason `auth` is its own entry point rather than
-// living inside `drive`: if it ever ships with a dependency, `./drive` and
-// `./calendar` stay at zero. It is not here because the prior art
-// (`google-auth-library`, `gtoken`, `jose`) has not been swept, and the honest
-// answer may turn out to be "use one of those".
+// It is the obvious third constructor, and the reason `auth` is its own entry
+// point rather than living inside a provider: if it ever ships with a
+// dependency, `/files/*` and `/calendar/*` stay at zero.
+//
+// What the survey found is that it cannot be the ~40-line local JWT minter it
+// looks like. Signing a JWT and sending it straight as the bearer is a Cloud API
+// mechanism; Drive and Calendar are scoped APIs, and for those the assertion has
+// to be exchanged at `oauth2.googleapis.com/token` for an access token — so a
+// built-in means a network call and a token cache in here, in a file that is
+// otherwise two pure constructors.
+//
+// See `docs/adr/0007-a-service-account-needs-a-token-exchange-so-it-stays-the-callers.md`
+// for the whole survey, including why the README now names `jose` rather than
+// `google-auth-library` (which does not run on Workers at all).
 //
 // Nothing is blocked in the meantime: the `Auth` type IS the escape hatch. Mint
 // a token however you like and pass `bearer(() => myToken())`, or pass your own
-// `(request) => request` function. See the README.
+// `(request) => request` function. The README has the whole exchange, cache
+// included, in about a dozen lines.

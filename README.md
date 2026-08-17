@@ -113,21 +113,75 @@ fetchPhotos({
 ### Service accounts
 
 Not shipped, and not needed to use one: the `Auth` type **is** the escape hatch.
+Share the Drive folder or the calendar with the service account's own email
+address — **no domain-wide delegation** — mint a token, and pass it in.
+
+**Use [`jose`](https://www.npmjs.com/package/jose), not `google-auth-library`.**
+That is not a style preference: `google-auth-library` and `gtoken` sign through
+`jws`, which needs `crypto.createSign`, which Workers does not implement — so the
+official library does not run on a runtime this README promises on its first
+screen. `jose` has zero dependencies and runs everywhere this package does.
 
 ```js
-// Mint the token however you like — google-auth-library, jose, your own
-// WebCrypto RS256, a token from CI — and hand it over.
-fetchPhotos({ folderId, auth: bearer(() => mintServiceAccountToken()) });
+import { importPKCS8, SignJWT } from "jose";
+import { bearer } from "@palebluebytes/google-cms/auth";
 
-// Or skip the constructors entirely and authorise the Request yourself.
+// Cached across the build: one exchange, not one per request. `expires_in` is a
+// second-count, and the minute of slack keeps a long build off the boundary.
+let cached;
+
+async function accessToken() {
+  if (cached && cached.expires > Date.now() + 60_000) return cached.token;
+
+  const assertion = await new SignJWT({
+    scope: "https://www.googleapis.com/auth/drive.readonly",
+  })
+    .setProtectedHeader({ alg: "RS256" })
+    .setIssuer(CLIENT_EMAIL) // `sub` is only for impersonating a user
+    .setAudience("https://oauth2.googleapis.com/token")
+    .setIssuedAt()
+    .setExpirationTime("1h")
+    .sign(await importPKCS8(PRIVATE_KEY, "RS256"));
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Token exchange failed: ${response.status}`);
+  }
+
+  const { access_token, expires_in } = await response.json();
+  cached = { token: access_token, expires: Date.now() + expires_in * 1000 };
+  return access_token;
+}
+
+fetchPhotos({ folderId, auth: bearer(accessToken) });
+```
+
+Or skip the constructors entirely and authorise the `Request` yourself:
+
+```js
 fetchEvents({ calendarId, auth: (request) => myPreAuthedRewrite(request) });
 ```
 
-A built-in `serviceAccount({clientEmail, privateKey})` may ship later, from
-`/auth` so that every provider entry point stays at zero dependencies whatever it
-ends up depending on. It is absent today because the prior art
-(`google-auth-library`, `gtoken`, `jose`) has not been surveyed, and the honest
-answer may be "use one of those".
+**Why the exchange, and not a self-signed JWT?** Signing a JWT and sending it
+straight as the bearer — no token endpoint at all — is a real Google mechanism,
+but it is a Cloud API one: the `scope` claim in a self-signed JWT is gated behind
+an opt-in and is not supported by every backend, and Google's own libraries fall
+back to this exchange whenever a scope is present. Drive and Calendar are scoped
+APIs, so the exchange is the path.
+
+A built-in `serviceAccount({clientEmail, privateKey, scope})` is **not** planned
+for now, and the dozen lines above are the reason: it would put a network call and
+a token cache inside this package to save you code you can read. The full
+reasoning, including what would change it, is in
+[ADR-0007](docs/adr/0007-a-service-account-needs-a-token-exchange-so-it-stays-the-callers.md).
 
 ---
 
