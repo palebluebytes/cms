@@ -13,6 +13,7 @@
 import type { Auth, FetchLike } from "./auth.js";
 import { pages } from "./internal/page-walk.ts";
 import { requireAuth } from "./internal/require-auth.ts";
+import { send } from "./internal/send.ts";
 
 // Everything a gallery needs, in ONE listing call. `imageMediaMetadata` rides
 // along with only an API key, so build-time aspect ratios cost no extra request
@@ -300,27 +301,17 @@ export async function fetchPhotos(options: DriveOptions): Promise<Photo[]> {
  */
 export async function fetchBytes(
 	photo: { id: string },
-	{
-		auth,
-		fetch: fetchImpl = globalThis.fetch,
-	}: Pick<DriveOptions, "auth" | "fetch">,
+	{ auth, fetch: fetchImpl }: Pick<DriveOptions, "auth" | "fetch">,
 ): Promise<Uint8Array> {
 	requireAuth(auth, "fetchBytes");
 
-	const request = await auth(
-		new Request(
-			`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(photo.id)}?alt=media`,
-		),
+	const res = await send(
+		`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(photo.id)}?alt=media`,
+		{ auth, fetch: fetchImpl, what: `download Drive file ${photo.id}` },
 	);
-	const res = await fetchImpl(request);
 
-	if (!res.ok) {
-		throw new Error(
-			`Failed to download Drive file ${photo.id}: ${res.status} ${res.statusText}`,
-		);
-	}
-
-	// `res.ok` is not enough here. A file the credential cannot read answers
+	// A non-OK answer is already refused by `send`, and `res.ok` is not enough
+	// here anyway. A file the credential cannot read answers
 	// `200 text/html` with a sign-in page — roughly 900 KB of it — and anything
 	// downstream caches that as image bytes and then fails somewhere far away
 	// ("sharp: unsupported image format"). A media download that returns HTML

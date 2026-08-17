@@ -12,12 +12,14 @@
  * is behind this interface.
  *
  * The walk knows one field name, `nextPageToken`, because that is what drives
- * the loop. It knows nothing else about Drive or Calendar.
+ * the loop. It knows nothing else about Drive or Calendar — and nothing about
+ * credentials or status codes either: one page is one call to `send`.
  */
 
 // `.js`, not `.ts`, and only because this import is type-only: see the note in
 // `require-auth.ts`.
 import type { Auth, FetchLike } from "../auth.js";
+import { send } from "./send.ts";
 
 /**
  * Which listing is being walked. Interpolated into every message this module
@@ -33,7 +35,7 @@ export interface PageWalkOptions {
 	 * rather than this one.
 	 */
 	auth: Auth;
-	/** Defaults to the global. */
+	/** Defaults to the global, in `send`. Passed straight through. */
 	fetch?: FetchLike;
 	/**
 	 * Checked BEFORE each request, so `maxPages` is a count of requests made and
@@ -60,20 +62,16 @@ export interface PageWalkOptions {
  * Throws on a non-OK response, on a `pageToken` the API hands back to itself,
  * and on exceeding `maxPages`. All three are the same policy: a build-time tool
  * has no degraded mode, and a short answer that reads as a complete one is the
- * failure worth designing against.
+ * failure worth designing against. The first of the three is `send`'s — every
+ * authorised request refuses a non-OK answer, walk or not; the other two are the
+ * walk's own and exist nowhere else.
  *
  * @param url One page's URL, given the token for that page (`undefined` for the
  * first). The walk sets nothing else on it.
  */
 export async function* pages<Body extends { nextPageToken?: string }>(
 	url: (pageToken: string | undefined) => string,
-	{
-		auth,
-		fetch: fetchImpl = globalThis.fetch,
-		maxPages,
-		label,
-		capHint,
-	}: PageWalkOptions,
+	{ auth, fetch: fetchImpl, maxPages, label, capHint }: PageWalkOptions,
 ): AsyncGenerator<Body> {
 	let pageToken: string | undefined;
 
@@ -84,14 +82,11 @@ export async function* pages<Body extends { nextPageToken?: string }>(
 			);
 		}
 
-		const request = await auth(new Request(url(pageToken)));
-		const response = await fetchImpl(request);
-
-		if (!response.ok) {
-			throw new Error(
-				`Failed to read ${label}: ${response.status} ${response.statusText}`,
-			);
-		}
+		const response = await send(url(pageToken), {
+			auth,
+			fetch: fetchImpl,
+			what: `read ${label}`,
+		});
 
 		const body = (await response.json()) as Body;
 		yield body;
