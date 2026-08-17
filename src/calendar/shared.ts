@@ -103,18 +103,39 @@ export function addDays(day: string, n: number): string {
 }
 
 /**
- * An all-day end, corrected from EXCLUSIVE to INCLUSIVE.
+ * An all-day end, as the INCLUSIVE last day the event covers.
  *
- * Every calendar system worth reading states an all-day end as the day AFTER
- * the last: Google's `end.date` and RFC 5545's `DTEND` alike, so a
- * 13th-to-16th event arrives ending on the 17th. Every provider steps it back,
- * which is why this lives here rather than in whichever provider needed it
- * first — two providers disagreeing by a day about the same event is precisely
- * what the shared module exists to prevent.
+ * The spec's form is exclusive — the day AFTER the last. Google's `end.date` and
+ * RFC 5545's `DTEND` agree on it, so a 13th-to-16th event arrives ending on the
+ * 17th and gets stepped back. Every provider does this, which is why it lives
+ * here: two providers disagreeing by a day about the same event is precisely
+ * what this module exists to prevent. Consumers that emit `schema.org` `endDate`
+ * want the corrected value.
  *
- * Consumers that emit `schema.org` `endDate` want the corrected value; leaving
- * it exclusive puts the structured data one day out of step with the page.
+ * BUT REAL PRODUCERS DISAGREE, and the disagreement is not rare. Calendar Labs
+ * writes `DTEND` EQUAL to `DTSTART` for a one-day holiday — every event in its
+ * feed — where Google writes the next day. Stepping an equal end back invents an
+ * event that ends the day BEFORE it starts, and `isMultiDay` then reads true for
+ * a single day: a page that renders "1 January 2025 – 31 December 2024" and no
+ * error anywhere.
+ *
+ * So the start is an argument, and the three cases are told apart:
+ *
+ *   end AFTER start  → the spec's exclusive form; step it back
+ *   end EQUALS start → a dialect stating the last day directly; keep it
+ *   end BEFORE start → contradictory, and no reading of it is safe; throw
+ *
+ * The middle case is a judgement, stated here so it is not re-litigated by
+ * accident: an equal end is malformed by the letter of RFC 5545 §3.8.2.2, and
+ * refusing it would reject a mainstream feed in its entirety over a difference
+ * whose intent is unambiguous.
  */
-export function inclusiveEnd(end: string): string {
-	return addDays(end, -1);
+export function inclusiveEnd(end: string, start: string): string {
+	if (end > start) return addDays(end, -1);
+	if (end === start) return end;
+
+	throw new Error(
+		`An all-day event ends on ${end}, before it starts on ${start}. Refusing ` +
+			`to guess which of the two is wrong.`,
+	);
 }

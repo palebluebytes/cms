@@ -440,3 +440,20 @@ const SHARED_CALENDAR_AS_ICS = [
 conformsToTheCalendarContract("the ics provider", () =>
 	normaliseEvents(SHARED_CALENDAR_AS_ICS),
 );
+
+test("an all-day DTEND equal to DTSTART is one day, not a negative span", () => {
+	// Calendar Labs writes every one-day holiday this way — DTEND == DTSTART,
+	// where Google writes the next day. Both readings exist in the wild, and
+	// treating this one as exclusive renders an event that ends before it starts.
+	const [holiday] = normaliseEvents(
+		file(
+			"SUMMARY:New Year's Day",
+			"DTSTART;VALUE=DATE:20250101",
+			"DTEND;VALUE=DATE:20250101",
+		),
+	);
+
+	assert.equal(holiday!.start, "2025-01-01");
+	assert.equal(holiday!.end, "2025-01-01");
+	assert.equal(holiday!.isMultiDay, false);
+});

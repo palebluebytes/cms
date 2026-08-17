@@ -498,3 +498,24 @@ const SHARED_CALENDAR_FROM_GOOGLE: EventsPayload = {
 conformsToTheCalendarContract("the Google provider", () =>
 	normaliseEvents(SHARED_CALENDAR_FROM_GOOGLE),
 );
+
+test("an all-day end.date equal to start.date is one day, not a negative span", () => {
+	// Google's own answers are always exclusive, so this is defensive rather than
+	// observed — but the correction is shared with the ics provider, where the
+	// equal form is what a mainstream feed actually writes. Both entry points
+	// have to read it the same way or the same calendar renders differently
+	// depending on which one a site imported.
+	const [holiday] = normaliseEvents({
+		items: [
+			{
+				...event("New Year's Day"),
+				start: { date: "2025-01-01" },
+				end: { date: "2025-01-01" },
+			},
+		],
+	});
+
+	assert.equal(holiday!.start, "2025-01-01");
+	assert.equal(holiday!.end, "2025-01-01");
+	assert.equal(holiday!.isMultiDay, false);
+});

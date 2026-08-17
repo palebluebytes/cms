@@ -275,7 +275,7 @@ export function normaliseEvents(
 		// `end.date`.
 		const end =
 			rawEnd && rawEnd.kind === "date"
-				? { ...rawEnd, value: inclusiveEnd(rawEnd.value) }
+				? { ...rawEnd, value: inclusiveEnd(rawEnd.value, dayOf(start)) }
 				: rawEnd;
 
 		// The span, kept as whole days plus the end's own time of day, so every

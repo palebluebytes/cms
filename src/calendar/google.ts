@@ -201,7 +201,11 @@ export function normaliseEvents(
 		if (event.status === "cancelled" || !startAt) return [];
 
 		const rawEnd = end?.dateTime || end?.date || undefined;
-		const endAt = !timedStart && rawEnd ? inclusiveEnd(rawEnd) : rawEnd;
+		// The start goes in too: an all-day end is usually exclusive, but not every
+		// producer agrees, and `inclusiveEnd` needs both to tell the forms apart.
+		// Google's own answers are the exclusive kind.
+		const endAt =
+			!timedStart && rawEnd ? inclusiveEnd(rawEnd, startAt) : rawEnd;
 
 		return [
 			{
