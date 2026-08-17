@@ -27,11 +27,14 @@ Two traps bear on every change:
 - **Touching the build, an import specifier or `tsconfig.json`** — what ships,
   why `.ts` and `.js` extensions differ by import kind, and the order `typecheck`
   must run in: [`docs/agents/typescript-build.md`](docs/agents/typescript-build.md)
-- **Changing a transport or a normaliser** — the Drive field mask, Google's three
-  wrong defaults, all-day dates, and what must not cross the seam into this
-  package: [`docs/agents/transports.md`](docs/agents/transports.md)
-- **Writing a test** — why no test may need a credential, and what a `fetch`
-  double must be made of: [`docs/agents/testing.md`](docs/agents/testing.md)
+- **Changing a transport or a normaliser, or adding a provider** — where a
+  provider lives and what holds it to the contract, the Drive field mask,
+  Google's three wrong defaults, all-day dates, the `.ics` reader's own traps
+  (unfolding, recurrence, the sign-in page), and what must not cross the seam
+  into this package: [`docs/agents/transports.md`](docs/agents/transports.md)
+- **Writing a test** — why no test may need a credential, what a `fetch` double
+  must be made of, and the one suite every calendar provider runs:
+  [`docs/agents/testing.md`](docs/agents/testing.md)
 - **Releasing, publishing, or editing a version number** — release-please owns
   all of it, and the commit subject is the changelog:
   [`docs/agents/releasing.md`](docs/agents/releasing.md)
