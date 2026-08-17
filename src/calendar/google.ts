@@ -15,6 +15,7 @@
 import type { Auth, FetchLike } from "../auth.js";
 import { pages } from "../internal/page-walk.ts";
 import { requireAuth } from "../internal/require-auth.ts";
+import { inclusiveEnd } from "./shared.ts";
 import type { CalendarEvent } from "./shared.js";
 
 // 2500 is the API's ceiling; its DEFAULT is 250, which is the size of the tail a
@@ -163,19 +164,6 @@ export async function listEvents({
 	}
 
 	return { timeZone, items };
-}
-
-/**
- * Google's all-day `end.date` is EXCLUSIVE, so step it back a day and hand over
- * the last day the event actually covers.
- *
- * Done in UTC on a date-only string, which has no instant of its own: the Date
- * is arithmetic scaffolding here and never escapes.
- */
-function inclusiveEnd(end: string): string {
-	const date = new Date(`${end}T00:00:00Z`);
-	date.setUTCDate(date.getUTCDate() - 1);
-	return date.toISOString().slice(0, 10);
 }
 
 /**

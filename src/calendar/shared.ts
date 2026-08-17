@@ -87,3 +87,34 @@ export interface CalendarEvent {
 	 */
 	timeZone: string | undefined;
 }
+
+/**
+ * `YYYY-MM-DD`, `n` days later. Negative `n` goes back.
+ *
+ * The `Date` is arithmetic scaffolding on a UTC-pinned date string and NEVER
+ * ESCAPES — pin the string to UTC, count in days, take the date part back. A
+ * date-only string has no instant of its own, so anything that let a real zone
+ * near it would move the answer by a day for half the world.
+ */
+export function addDays(day: string, n: number): string {
+	const date = new Date(`${day}T00:00:00Z`);
+	date.setUTCDate(date.getUTCDate() + n);
+	return date.toISOString().slice(0, 10);
+}
+
+/**
+ * An all-day end, corrected from EXCLUSIVE to INCLUSIVE.
+ *
+ * Every calendar system worth reading states an all-day end as the day AFTER
+ * the last: Google's `end.date` and RFC 5545's `DTEND` alike, so a
+ * 13th-to-16th event arrives ending on the 17th. Every provider steps it back,
+ * which is why this lives here rather than in whichever provider needed it
+ * first — two providers disagreeing by a day about the same event is precisely
+ * what the shared module exists to prevent.
+ *
+ * Consumers that emit `schema.org` `endDate` want the corrected value; leaving
+ * it exclusive puts the structured data one day out of step with the page.
+ */
+export function inclusiveEnd(end: string): string {
+	return addDays(end, -1);
+}
