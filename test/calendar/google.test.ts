@@ -7,9 +7,11 @@ import {
 	listEvents,
 	normaliseEvents,
 	type EventResource,
+	type EventsPayload,
 } from "../../src/calendar/google.ts";
 import { recordConsole } from "../support/console.ts";
 import { serve } from "../support/serve.ts";
+import { conformsToTheCalendarContract } from "./conformance.ts";
 
 // What the transport ASKS for, how it walks pages, and what the normaliser makes
 // of the answer. Nothing here formats a date or knows what "now" is — a consumer
@@ -418,3 +420,81 @@ test("an empty calendar returns [] rather than throwing", async () => {
 		[],
 	);
 });
+
+// ------------------------------------------------------ the calendar contract
+
+// THE SHARED CALENDAR, as Google sends it. The same calendar encoded for every
+// other provider lives in that provider's test file, and
+// `conformance.ts` holds the answers all of them must agree on.
+//
+// Note what Google has already done here: the weekly series arrives as THREE
+// items, because `singleEvents=true` expanded it server-side. A provider reading
+// a file receives one rule and has to expand it itself — that asymmetry is the
+// point of running one suite against both.
+const SHARED_CALENDAR_FROM_GOOGLE: EventsPayload = {
+	timeZone: "Europe/London",
+	items: [
+		{
+			id: "reading",
+			status: "confirmed",
+			summary: "Reading",
+			start: { dateTime: "2099-03-04T19:00:00+00:00" },
+			end: { dateTime: "2099-03-04T20:00:00+00:00" },
+		},
+		{
+			id: "rehearsal-1",
+			status: "confirmed",
+			summary: "Weekly rehearsal",
+			start: { dateTime: "2099-04-01T18:00:00+00:00" },
+			end: { dateTime: "2099-04-01T20:00:00+00:00" },
+		},
+		{
+			id: "rehearsal-2",
+			status: "confirmed",
+			summary: "Weekly rehearsal",
+			start: { dateTime: "2099-04-08T18:00:00+00:00" },
+			end: { dateTime: "2099-04-08T20:00:00+00:00" },
+		},
+		{
+			id: "rehearsal-3",
+			status: "confirmed",
+			summary: "Weekly rehearsal",
+			start: { dateTime: "2099-04-15T18:00:00+00:00" },
+			end: { dateTime: "2099-04-15T20:00:00+00:00" },
+		},
+		{
+			// No `summary` at all: Google omits the field for an untitled event.
+			id: "untitled",
+			status: "confirmed",
+			start: { dateTime: "2099-05-01T09:00:00+00:00" },
+			end: { dateTime: "2099-05-01T10:00:00+00:00" },
+		},
+		{
+			// All-day, 13 to 16 June inclusive — stated as ending on the 17th.
+			id: "festival",
+			status: "confirmed",
+			summary: "Festival",
+			start: { date: "2099-06-13" },
+			end: { date: "2099-06-17" },
+		},
+		{
+			id: "open-studio",
+			status: "confirmed",
+			summary: "Open studio",
+			start: { date: "2099-09-21" },
+			end: { date: "2099-09-22" },
+		},
+		{
+			// Must not survive: cancelled is transport-shaped noise.
+			id: "cancelled",
+			status: "cancelled",
+			summary: "Cancelled talk",
+			start: { dateTime: "2099-07-07T12:00:00+00:00" },
+			end: { dateTime: "2099-07-07T13:00:00+00:00" },
+		},
+	],
+};
+
+conformsToTheCalendarContract("the Google provider", () =>
+	normaliseEvents(SHARED_CALENDAR_FROM_GOOGLE),
+);
