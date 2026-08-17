@@ -13,7 +13,8 @@ _Avoid_: client, fetcher, service
 
 **Normaliser**:
 The half of a resource that turns a raw payload into what a page lays out. Pure:
-no network, no clock, no environment, no locale.
+its only effect is its return value — so no network, no clock, no environment, no
+locale, and nothing written to a console.
 _Avoid_: mapper, parser, transformer
 
 **Page walk**:

@@ -15,11 +15,17 @@ returns `undefined`, deliberately.
 
 ## The normalisers must stay pure
 
-`normalisePhotos` and `normaliseEvents` take a payload and return data. No
-network, no clock, no environment, no locale. A `new Date()` or a
-`toLocaleDateString` in there breaks nothing visibly; it just makes the function
-untestable at the point it is most worth testing, which is the property the whole
-testing story rests on.
+`normalisePhotos` and `normaliseEvents` take a payload and return data, and their
+**only effect is that return value** — the general rule, of which no network, no
+clock, no environment and no locale are the four cases that bite. A `new Date()`
+or a `toLocaleDateString` in there breaks nothing visibly; it just makes the
+function untestable at the point it is most worth testing, which is the property
+the whole testing story rests on.
+
+A `console.warn` is the one that got in, precisely because it is none of those
+four — it lived in `displayDimensions` until
+[`ADR-0002`](../adr/0002-the-normalisers-report-nothing.md). Neither normaliser
+reports anything now, and `test/drive.test.ts` fails if one starts.
 
 ## The page walk is one module, and it is not in the transports
 
