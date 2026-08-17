@@ -6,6 +6,15 @@ site generators. This is the glossary; the traps live in
 
 ## Language
 
+**Resource**:
+One Google listing this package can read, as a Transport and a Normaliser plus
+the function composing the two. There are exactly two, one entry point each:
+`listFiles` / `normalisePhotos` / `fetchPhotos`, and `listEvents` /
+`normaliseEvents` / `fetchEvents`. A shape the code follows and deliberately not
+a module it instantiates —
+[`ADR-0003`](docs/adr/0003-the-resource-shape-is-a-convention.md).
+_Avoid_: source, provider, integration
+
 **Transport**:
 The half of a resource that talks to Google and interprets nothing — it decides
 what to ask for and hands back the raw payload.

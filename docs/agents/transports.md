@@ -4,6 +4,15 @@ The shape — `listFiles` / `normalisePhotos` / `fetchPhotos`, and what each hal
 is for — is in [`README.md`](../../README.md#transport-normaliser-composition).
 The traps are here.
 
+## The two transports mirror each other on purpose
+
+`listFiles` and `listEvents` follow the same outline and share almost no code.
+Extracting a `resource()` that constructs both was considered and rejected in
+[`ADR-0003`](../adr/0003-the-resource-shape-is-a-convention.md): it would take six
+parameters to save six lines twice. Adding a third resource means writing the
+outline again — and naming it in `PageWalkLabel`, and remembering `requireAuth`,
+neither of which anything enforces.
+
 ## Nothing crosses the seam that belongs to a site
 
 Ordering, filtering, formatting, a future/past partition, a default time zone, a
