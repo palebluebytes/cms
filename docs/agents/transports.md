@@ -34,7 +34,9 @@ the whole testing story rests on.
 A `console.warn` is the one that got in, precisely because it is none of those
 four — it lived in `displayDimensions` until
 [`ADR-0002`](../adr/0002-the-normalisers-report-nothing.md). Neither normaliser
-reports anything now, and `test/drive.test.ts` fails if one starts.
+reports anything now, and each has a test that fails if it starts: `recordConsole`
+from `test/support/console.ts`, once in `test/drive.test.ts` and once in
+`test/calendar.test.ts`.
 
 ## The page walk is one module, and it is not in the transports
 

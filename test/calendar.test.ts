@@ -8,6 +8,7 @@ import {
 	normaliseEvents,
 	type EventResource,
 } from "../src/calendar.ts";
+import { recordConsole } from "./support/console.ts";
 import { serve } from "./support/serve.ts";
 
 // What the transport ASKS for, how it walks pages, and what the normaliser makes
@@ -341,6 +342,31 @@ test("description and location are empty strings when unset, never undefined", (
 
 	assert.equal(e.description, "");
 	assert.equal(e.location, "");
+});
+
+test("normaliseEvents has no effect other than its return value", () => {
+	// The rule covers both normalisers, so the guard does too
+	// (`docs/adr/0002-the-normalisers-report-nothing.md`). The temptation is
+	// arguably stronger here than in Drive: this function DROPS records, and a
+	// dropped event leaves no trace in the return value to report it with — which
+	// is exactly the reasoning that would justify a log line, and exactly the
+	// decision the ADR settles. A cancelled and a startless event, then.
+	const said = recordConsole(() =>
+		normaliseEvents({
+			items: [
+				{
+					...event("Cancelled", "2099-03-04T19:00:00+00:00"),
+					status: "cancelled",
+				},
+				{
+					...event("Startless", "2099-03-05T19:00:00+00:00"),
+					start: undefined,
+				},
+			],
+		}),
+	);
+
+	assert.deepEqual(said, [], "the normaliser reached for the console");
 });
 
 test("an events.list body with no items normalises to an empty array", () => {
