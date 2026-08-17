@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { apiKey } from "../src/auth.ts";
 import { pages, type PageWalkOptions } from "../src/internal/page-walk.ts";
-import { serve, serveEndless } from "./support/serve.ts";
+import { serve, serveBytes, serveEndless } from "./support/serve.ts";
 
 // The walk itself, once, rather than twice through two transports. Every guard
 // here is a way a listing can come back short while looking complete, which is
@@ -152,4 +152,29 @@ test("throws on a non-OK response, naming the listing and the status", async () 
 	await assert.rejects(() => walk({ fetch }), {
 		message: "Failed to read folder: 403 Forbidden",
 	});
+});
+
+test("throws on a 200 that is not JSON, naming the page and the content-type", async () => {
+	// `send` establishes the status, not the shape. Unguarded, `.json()` throws a
+	// bare SyntaxError naming neither the listing nor the page — and the
+	// content-type is the fact that says what answered instead of the API.
+	const { fetch } = serveBytes("<html>Sign in</html>", {
+		type: "text/html; charset=UTF-8",
+	});
+
+	await assert.rejects(
+		() => walk({ fetch }),
+		(error: unknown) => {
+			assert.ok(error instanceof Error);
+			assert.match(
+				error.message,
+				/the folder walk could not read page 1 as JSON/i,
+			);
+			assert.match(error.message, /content-type was text\/html; charset=UTF-8/);
+			// The parse failure is kept as the cause: provenance for a human, not a
+			// code to branch on — see docs/adr/0001-errors-carry-messages-not-codes.md.
+			assert.ok(error.cause instanceof Error);
+			return true;
+		},
+	);
 });

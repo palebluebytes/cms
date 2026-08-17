@@ -59,12 +59,12 @@ export interface PageWalkOptions {
  * things from a page — `files`, versus `items` plus the calendar's `timeZone`
  * off the first one — and that difference is theirs to keep.
  *
- * Throws on a non-OK response, on a `pageToken` the API hands back to itself,
- * and on exceeding `maxPages`. All three are the same policy: a build-time tool
- * has no degraded mode, and a short answer that reads as a complete one is the
- * failure worth designing against. The first of the three is `send`'s — every
- * authorised request refuses a non-OK answer, walk or not; the other two are the
- * walk's own and exist nowhere else.
+ * Throws on a non-OK response, on a body that is not JSON, on a `pageToken` the
+ * API hands back to itself, and on exceeding `maxPages`. All four are the same
+ * policy: a build-time tool has no degraded mode, and a short answer that reads
+ * as a complete one is the failure worth designing against. The first is
+ * `send`'s — every authorised request refuses a non-OK answer, walk or not; the
+ * rest are the walk's own and exist nowhere else.
  *
  * @param url One page's URL, given the token for that page (`undefined` for the
  * first). The walk sets nothing else on it.
@@ -88,7 +88,23 @@ export async function* pages<Body extends { nextPageToken?: string }>(
 			what: `read ${label}`,
 		});
 
-		const body = (await response.json()) as Body;
+		// `send` has established the status, not the shape. A 200 carrying anything
+		// but JSON throws a bare `SyntaxError` out of `.json()` naming neither the
+		// listing nor the page, so the content-type is read and said out loud — it
+		// is the one fact that tells a human what answered instead of the API.
+		let body: Body;
+		try {
+			body = (await response.json()) as Body;
+		} catch (cause) {
+			const type = response.headers.get("content-type") || "absent";
+			throw new Error(
+				`The ${label} walk could not read page ${page} as JSON — the ` +
+					`content-type was ${type}. A 200 that is not a listing usually ` +
+					`means something between you and Google answered instead of it.`,
+				{ cause },
+			);
+		}
+
 		yield body;
 
 		if (!body.nextPageToken) return;

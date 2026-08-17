@@ -31,10 +31,10 @@ reports anything now, and `test/drive.test.ts` fails if one starts.
 
 `listFiles` and `listEvents` say what one page's URL is and hand it to
 [`src/internal/page-walk.ts`](../../src/internal/page-walk.ts). The loop, the
-`maxPages` cap and the refusal to follow a repeated `pageToken` all live there,
-tested in `test/page-walk.test.ts` — not through either transport. A fix belongs
-in the walk, and a third transport gets the guards by construction rather than by
-being copied from one of these two.
+`maxPages` cap, the refusal to follow a repeated `pageToken` and the refusal to
+read a non-JSON body all live there, tested in `test/page-walk.test.ts` — not
+through either transport. A fix belongs in the walk, and a third transport gets
+the guards by construction rather than by being copied from one of these two.
 
 ## Applying the credential is one module below that
 
