@@ -1,13 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { apiKey, type FetchLike } from "../src/auth.ts";
+import { apiKey } from "../src/auth.ts";
 import {
 	fetchEvents,
 	listEvents,
 	normaliseEvents,
 	type EventResource,
 } from "../src/calendar.ts";
+import { serve } from "./support/serve.ts";
 
 // What the transport ASKS for, how it walks pages, and what the normaliser makes
 // of the answer. Nothing here formats a date or knows what "now" is — a consumer
@@ -19,17 +20,8 @@ import {
 const auth = apiKey("test-key");
 const CALENDAR = "someone@example.test";
 
-// Serve the given pages in order, recording every URL asked for. A page is a raw
-// events.list body: `{timeZone, items, nextPageToken}`.
-function serve(...pages: unknown[]) {
-	const requested: URL[] = [];
-	let call = 0;
-	const fetch: FetchLike = async (request) => {
-		requested.push(new URL(request.url));
-		return Response.json(pages[Math.min(call++, pages.length - 1)]);
-	};
-	return { fetch, requested };
-}
+// A page served below is a raw events.list body: `{timeZone, items,
+// nextPageToken}`.
 
 // A timed events.list item.
 function event(
@@ -55,7 +47,9 @@ test("asks the API to expand recurring series into instances", async () => {
 	// Google defaults singleEvents to false, which hands back the unexpanded
 	// master carrying its RRULE — a normaliser has no idea what an RRULE is, so
 	// a weekly series would render as ONE event on the series' start date.
-	const { fetch, requested } = serve({ timeZone: "Europe/London", items: [] });
+	const { fetch, requested } = serve([
+		{ timeZone: "Europe/London", items: [] },
+	]);
 
 	await listEvents({ calendarId: CALENDAR, auth, fetch });
 
@@ -63,7 +57,9 @@ test("asks the API to expand recurring series into instances", async () => {
 });
 
 test("orders by startTime, which the API only allows alongside singleEvents", async () => {
-	const { fetch, requested } = serve({ timeZone: "Europe/London", items: [] });
+	const { fetch, requested } = serve([
+		{ timeZone: "Europe/London", items: [] },
+	]);
 
 	await listEvents({ calendarId: CALENDAR, auth, fetch });
 
@@ -76,7 +72,9 @@ test("orders by startTime, which the API only allows alongside singleEvents", as
 });
 
 test("asks for the largest page the API allows, not the 250 default", async () => {
-	const { fetch, requested } = serve({ timeZone: "Europe/London", items: [] });
+	const { fetch, requested } = serve([
+		{ timeZone: "Europe/London", items: [] },
+	]);
 
 	await listEvents({ calendarId: CALENDAR, auth, fetch });
 
@@ -84,7 +82,9 @@ test("asks for the largest page the API allows, not the 250 default", async () =
 });
 
 test("sends no time window unless asked — a default one would hide past events", async () => {
-	const { fetch, requested } = serve({ timeZone: "Europe/London", items: [] });
+	const { fetch, requested } = serve([
+		{ timeZone: "Europe/London", items: [] },
+	]);
 
 	await listEvents({ calendarId: CALENDAR, auth, fetch });
 
@@ -93,7 +93,9 @@ test("sends no time window unless asked — a default one would hide past events
 });
 
 test("timeMin and timeMax are passed through when a caller does ask", async () => {
-	const { fetch, requested } = serve({ timeZone: "Europe/London", items: [] });
+	const { fetch, requested } = serve([
+		{ timeZone: "Europe/London", items: [] },
+	]);
 
 	await listEvents({
 		calendarId: CALENDAR,
@@ -114,7 +116,9 @@ test("timeMin and timeMax are passed through when a caller does ask", async () =
 });
 
 test("the calendar id is escaped into the path, and the auth applied", async () => {
-	const { fetch, requested } = serve({ timeZone: "Europe/London", items: [] });
+	const { fetch, requested } = serve([
+		{ timeZone: "Europe/London", items: [] },
+	]);
 
 	await listEvents({ calendarId: "a b@example.test", auth, fetch });
 
@@ -133,7 +137,7 @@ test("the calendar id is escaped into the path, and the auth applied", async () 
 // the calendar's zone off the first one.
 
 test("follows nextPageToken and keeps every page's events", async () => {
-	const { fetch, requested } = serve(
+	const { fetch, requested } = serve([
 		{
 			timeZone: "Europe/London",
 			items: [event("Page one", "2099-03-04T19:00:00+00:00")],
@@ -143,7 +147,7 @@ test("follows nextPageToken and keeps every page's events", async () => {
 			timeZone: "Europe/London",
 			items: [event("Page two", "2099-03-05T19:00:00+00:00")],
 		},
-	);
+	]);
 
 	const { items, timeZone } = await listEvents({
 		calendarId: CALENDAR,
@@ -164,7 +168,7 @@ test("follows nextPageToken and keeps every page's events", async () => {
 // ------------------------------------------------------------------ failures
 
 test("throws immediately when no auth was passed", async () => {
-	const { fetch } = serve({ items: [] });
+	const { fetch } = serve([{ items: [] }]);
 
 	await assert.rejects(
 		// @ts-expect-error — the omission the runtime guard exists for
@@ -334,10 +338,12 @@ test("neither sorted nor partitioned — both need a clock, and the clock is the
 // -------------------------------------------------------------- fetchEvents
 
 test("fetchEvents is listEvents then normaliseEvents", async () => {
-	const { fetch } = serve({
-		timeZone: "Europe/London",
-		items: [event("Reading", "2099-03-04T19:00:00+00:00")],
-	});
+	const { fetch } = serve([
+		{
+			timeZone: "Europe/London",
+			items: [event("Reading", "2099-03-04T19:00:00+00:00")],
+		},
+	]);
 
 	const events = await fetchEvents({ calendarId: CALENDAR, auth, fetch });
 
@@ -347,7 +353,7 @@ test("fetchEvents is listEvents then normaliseEvents", async () => {
 });
 
 test("an empty calendar returns [] rather than throwing", async () => {
-	const { fetch } = serve({ timeZone: "Europe/London", items: [] });
+	const { fetch } = serve([{ timeZone: "Europe/London", items: [] }]);
 
 	assert.deepEqual(
 		await fetchEvents({ calendarId: CALENDAR, auth, fetch }),

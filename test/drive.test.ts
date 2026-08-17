@@ -1,7 +1,7 @@
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { apiKey, type FetchLike } from "../src/auth.ts";
+import { apiKey } from "../src/auth.ts";
 import {
 	fetchBytes,
 	fetchPhotos,
@@ -10,6 +10,7 @@ import {
 	type DriveFile,
 	type ImageMediaMetadata,
 } from "../src/drive.ts";
+import { serve, serveBytes } from "./support/serve.ts";
 
 // Transport, normaliser and delivery. `listFiles` and `fetchBytes` take their
 // `fetch` as an option, so nothing here touches `globalThis.fetch` or the
@@ -71,28 +72,6 @@ function param(url: URL, name: string): string {
 	const value = url.searchParams.get(name);
 	assert.ok(value !== null, `no ${name} parameter in ${url}`);
 	return value;
-}
-
-// Answer every request with the same payload, recording what was asked for. The
-// responses are real `Response`s: the code reads `ok`, `status`, `headers` and
-// `json()`, and a fake of those four is a fake of the contract under test.
-function serve(
-	payload: unknown,
-	{
-		status = 200,
-		statusText = "OK",
-	}: { status?: number; statusText?: string } = {},
-) {
-	const requested: URL[] = [];
-	const fetch: FetchLike = async (request) => {
-		requested.push(new URL(request.url));
-		return new Response(JSON.stringify(payload), {
-			status,
-			statusText,
-			headers: { "content-type": "application/json" },
-		});
-	};
-	return { fetch, requested };
 }
 
 const auth = apiKey("test-key");
@@ -254,7 +233,7 @@ test("an empty or absent file list normalises to an empty array", () => {
 test("the query scopes to the folder and excludes the trash — and nothing else", async () => {
 	// WHICH files are wanted is the caller's decision, so the base query says
 	// nothing about mimeType.
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
@@ -266,7 +245,7 @@ test("the query scopes to the folder and excludes the trash — and nothing else
 
 test("imageMediaMetadata and webContentLink ride along on the listing call", async () => {
 	// Both cost no extra request, which is the finding the whole gallery rests on.
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
@@ -276,7 +255,7 @@ test("imageMediaMetadata and webContentLink ride along on the listing call", asy
 });
 
 test("the walk is ordered by name, which is transport determinism, not display order", async () => {
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
@@ -284,7 +263,7 @@ test("the walk is ordered by name, which is transport determinism, not display o
 });
 
 test("the auth is applied — the key reaches the request", async () => {
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
@@ -292,7 +271,7 @@ test("the auth is applied — the key reaches the request", async () => {
 });
 
 test("extraFields MERGE into the field list rather than replacing it", async () => {
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({
 		folderId: FOLDER,
@@ -307,7 +286,7 @@ test("extraFields MERGE into the field list rather than replacing it", async () 
 });
 
 test("extraQuery is AND-ed onto the base q rather than replacing it", async () => {
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({
 		folderId: FOLDER,
@@ -322,7 +301,7 @@ test("extraQuery is AND-ed onto the base q rather than replacing it", async () =
 });
 
 test("throws immediately when no auth was passed", async () => {
-	const { fetch } = serve({ files: [] });
+	const { fetch } = serve([{ files: [] }]);
 
 	await assert.rejects(
 		// @ts-expect-error — the omission the runtime guard exists for
@@ -339,23 +318,11 @@ test("throws immediately when no auth was passed", async () => {
 // belongs here is what Drive gets wrong: the mask that makes the walk possible
 // at all, and that this transport keeps every page it is handed.
 
-// Serve the given pages in order, recording every URL asked for.
-function servePages(...pages: unknown[]) {
-	const requested: URL[] = [];
-	let call = 0;
-	const fetch: FetchLike = async (request) => {
-		requested.push(new URL(request.url));
-		const page = pages[Math.min(call++, pages.length - 1)];
-		return Response.json(page);
-	};
-	return { fetch, requested };
-}
-
 test("nextPageToken is in the field mask — without it the walk cannot happen", async () => {
 	// A `fields=files(...)` mask OMITS nextPageToken, and then a folder past the
 	// first page is silently truncated with no error anywhere. This is the whole
 	// reason pagination is a trap rather than a loop.
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
@@ -363,10 +330,10 @@ test("nextPageToken is in the field mask — without it the walk cannot happen",
 });
 
 test("follows nextPageToken and keeps every page's files", async () => {
-	const { fetch, requested } = servePages(
+	const { fetch, requested } = serve([
 		{ files: [file("1 - a.jpg")], nextPageToken: "token-2" },
 		{ files: [file("2 - b.jpg")] },
-	);
+	]);
 
 	const { files } = await listFiles({ folderId: FOLDER, auth, fetch });
 
@@ -380,7 +347,7 @@ test("follows nextPageToken and keeps every page's files", async () => {
 });
 
 test("asks for the largest page the API allows", async () => {
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
@@ -388,27 +355,6 @@ test("asks for the largest page the API allows", async () => {
 });
 
 // ------------------------------------------------------------------ fetchBytes
-
-// A media response: bytes plus the headers the guard reads.
-function serveBytes(
-	body: string,
-	{
-		status = 200,
-		statusText = "OK",
-		type = "image/jpeg",
-	}: { status?: number; statusText?: string; type?: string } = {},
-) {
-	const requested: URL[] = [];
-	const fetch: FetchLike = async (request) => {
-		requested.push(new URL(request.url));
-		return new Response(body, {
-			status,
-			statusText,
-			headers: { "content-type": type },
-		});
-	};
-	return { fetch, requested };
-}
 
 test("fetchBytes downloads alt=media, authorised, and returns a Uint8Array", async () => {
 	// NOT a Buffer: Buffer is Node-only and this package targets any runtime.
@@ -472,9 +418,9 @@ test("fetchBytes throws immediately when no auth was passed", async () => {
 // ------------------------------------------------------------------ fetchPhotos
 
 test("fetchPhotos is listFiles then normalisePhotos", async () => {
-	const { fetch } = serve({
-		files: [file("1 - x.jpg", { id: "abc", width: 1000, height: 500 })],
-	});
+	const { fetch } = serve([
+		{ files: [file("1 - x.jpg", { id: "abc", width: 1000, height: 500 })] },
+	]);
 
 	const photos = await fetchPhotos({ folderId: FOLDER, auth, fetch });
 
@@ -487,7 +433,7 @@ test("an empty listing returns [] rather than throwing", async () => {
 	// `200 {"files": []}` is also what a folder that stopped being shared looks
 	// like — but "empty" is legal, and only the consumer knows whether its own
 	// folder can ever be.
-	const { fetch } = serve({ files: [] });
+	const { fetch } = serve([{ files: [] }]);
 
 	assert.deepEqual(await fetchPhotos({ folderId: FOLDER, auth, fetch }), []);
 });

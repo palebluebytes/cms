@@ -1,12 +1,13 @@
 /**
  * A `fetch` double, made of real `Response`s.
  *
- * `ok` derived from a status, real `Headers`, a real `json()` — a literal
- * carrying `ok`/`json` gets to agree with whatever the code happens to read,
- * which is the one thing a transport test must not do. See
- * `docs/agents/testing.md`.
+ * `ok` derived from a status, real `Headers`, a real `json()`, a real
+ * `arrayBuffer()` — a literal carrying `ok`/`json` gets to agree with whatever
+ * the code happens to read, which is the one thing a transport test must not
+ * do. See `docs/agents/testing.md`.
  *
- * The transport tests still carry their own doubles; they move here next.
+ * Every test file uses these. A double written beside a test is a copy of this
+ * contract that nothing keeps honest.
  */
 
 import type { FetchLike } from "../../src/auth.ts";
@@ -41,6 +42,37 @@ export function serve(
 			status,
 			statusText,
 			headers: { "content-type": "application/json" },
+		});
+	};
+
+	return { fetch, requested };
+}
+
+export interface ServeBytesOptions extends ServeOptions {
+	/** Defaults to `image/jpeg`. The header `fetchBytes` reads. */
+	type?: string;
+}
+
+/**
+ * Answer with a body that is not JSON — a media download, or the sign-in page
+ * Drive sends instead of one.
+ */
+export function serveBytes(
+	body: string,
+	{
+		status = 200,
+		statusText = "OK",
+		type = "image/jpeg",
+	}: ServeBytesOptions = {},
+): Served {
+	const requested: URL[] = [];
+
+	const fetch: FetchLike = async (request) => {
+		requested.push(new URL(request.url));
+		return new Response(body, {
+			status,
+			statusText,
+			headers: { "content-type": type },
 		});
 	};
 
