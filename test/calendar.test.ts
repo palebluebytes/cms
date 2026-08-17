@@ -205,6 +205,34 @@ test("cancelled events and events with no start are dropped", async () => {
 	);
 });
 
+test("only `cancelled` drops an event — an unfamiliar status is kept", () => {
+	// `status` is typed as an OPEN union, so a value Google has not documented
+	// still assigns (this file would stop compiling if the union were closed) and
+	// still reaches the consumer. Interpreting one value means interpreting one
+	// value.
+	const events = normaliseEvents({
+		items: [
+			{
+				...event("Tentative", "2099-03-04T19:00:00+00:00"),
+				status: "tentative",
+			},
+			{
+				...event("Postponed", "2099-03-05T19:00:00+00:00"),
+				status: "postponed",
+			},
+			{
+				...event("Statusless", "2099-03-06T19:00:00+00:00"),
+				status: undefined,
+			},
+		],
+	});
+
+	assert.deepEqual(
+		events.map((e) => e.summary),
+		["Tentative", "Postponed", "Statusless"],
+	);
+});
+
 test("a timed event keeps its offset and is not all-day", () => {
 	const [e] = normaliseEvents({
 		items: [event("Reading", "2099-03-04T19:00:00+00:00")],

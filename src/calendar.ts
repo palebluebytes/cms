@@ -39,7 +39,13 @@ export interface EventDateTime {
 /** A raw `events.list` item, as `listEvents` hands it on. */
 export interface EventResource {
 	id: string;
-	status?: string;
+	/**
+	 * Google's three values, and OPEN — the `(string & {})` arm keeps a fourth
+	 * from being a type error while still offering the three by name. Only
+	 * `"cancelled"` is interpreted here; anything else is handed over untouched,
+	 * so a value Google adds later reaches a consumer rather than a drop.
+	 */
+	status?: "confirmed" | "tentative" | "cancelled" | (string & {});
 	summary?: string;
 	description?: string;
 	location?: string;
