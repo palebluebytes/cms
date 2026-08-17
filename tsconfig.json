@@ -41,6 +41,15 @@
 		"isolatedModules": true,
 
 		"strict": true,
+
+		// A binding with no reader is an invitation to find a use for it, which is
+		// how a `console.warn` kept its filename parameter alive inside the pure
+		// half (ADR-0002). This file's whole job is turning review findings into
+		// compile errors, and that one had no reason to be the exception. Both are
+		// clean today, in `src` and in the test program that extends this config.
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+
 		"noImplicitOverride": true,
 		"noFallthroughCasesInSwitch": true,
 		"skipLibCheck": true
