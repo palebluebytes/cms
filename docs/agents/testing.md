@@ -29,6 +29,24 @@ It bites: it has been checked against a deliberately broken provider that kept a
 cancelled event, dropped a series instance, invented a title and left an all-day
 end uncorrected. Each one fails it.
 
+## Some expectations come from outside this repo, and say so
+
+Two kinds of test here cannot be written by reasoning about the code, because the
+code and the reasoning would share a mistake:
+
+- **The recurrence expectations at the end of `test/calendar/recurrence.test.ts`**
+  were produced by **rrule.js**, the reference implementation, and this expander
+  agreed with all of them. rrule.js is deliberately not a dependency — its
+  answers are baked in as golden values. The `WKST` pair is the one to keep: the
+  same rule under two week starts gives two different sets, so a `WKST` that had
+  been ignored would still pass every other test in the file.
+- **The all-day-end dialect** in `test/calendar/shared.test.ts` came from real
+  feeds, not from the spec. Calendar Labs writes `DTEND` equal to `DTSTART`;
+  Google writes the next day.
+
+If you change either, re-derive the expectation from the same outside source
+rather than from what the code now does.
+
 ## A `fetch` double answers with a real `Response`
 
 `ok` derived from a status, a real `Headers`, a real `arrayBuffer()`. A literal

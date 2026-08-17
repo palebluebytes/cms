@@ -254,3 +254,136 @@ test("refuses an UNTIL it cannot read", () => {
 		/UNTIL "soon"/,
 	);
 });
+
+// ------------------------------------------------- checked against rrule.js
+//
+// The expectations below are NOT hand-derived. Every one was produced by
+// rrule.js, the reference implementation, for the same DTSTART and rule, and
+// this expander agreed with all of them. That matters because the tests above
+// were written from the same reading of RFC 5545 as the code, so a misreading
+// consistent across both would pass them; an independent implementation is the
+// only thing that catches it.
+//
+// rrule.js is deliberately NOT a dependency here — its answers are baked in as
+// golden values instead, so the suite keeps this evidence without the package
+// gaining a devDependency it would otherwise never need. Re-derive them by
+// running the same rules through rrule.js if one is ever disputed.
+
+test("BYDAY across a week matches the reference implementation", () => {
+	assert.deepEqual(
+		starts(
+			expand({
+				start: WEDNESDAY,
+				rule: "FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=8",
+			}),
+		),
+		[
+			"2099-04-01T18:00:00Z",
+			"2099-04-03T18:00:00Z",
+			"2099-04-06T18:00:00Z",
+			"2099-04-08T18:00:00Z",
+			"2099-04-10T18:00:00Z",
+			"2099-04-13T18:00:00Z",
+			"2099-04-15T18:00:00Z",
+			"2099-04-17T18:00:00Z",
+		],
+	);
+});
+
+test("BYDAY with INTERVAL skips whole calendar weeks, not pairs of instances", () => {
+	// The 2nd and the 14th, not the 2nd and the 7th: INTERVAL counts weeks, so
+	// the week of the 6th is skipped entirely. This is the case a naive
+	// "every other matching day" reading gets wrong.
+	assert.deepEqual(
+		starts(
+			expand({
+				start: WEDNESDAY,
+				rule: "FREQ=WEEKLY;BYDAY=TU,TH;INTERVAL=2;COUNT=7",
+			}),
+		),
+		[
+			"2099-04-02T18:00:00Z",
+			"2099-04-14T18:00:00Z",
+			"2099-04-16T18:00:00Z",
+			"2099-04-28T18:00:00Z",
+			"2099-04-30T18:00:00Z",
+			"2099-05-12T18:00:00Z",
+			"2099-05-14T18:00:00Z",
+		],
+	);
+});
+
+test("WKST decides which days fall in which block, and changes the answer", () => {
+	// The same rule under two week starts, giving two different sets — which is
+	// why WKST cannot be ignored when INTERVAL is greater than 1. Sunday and
+	// Monday are in the SAME week under WKST=SU and in ADJACENT weeks under
+	// WKST=MO.
+	const sunday = starts(
+		expand({
+			start: WEDNESDAY,
+			rule: "FREQ=WEEKLY;BYDAY=SU,MO;INTERVAL=2;COUNT=6;WKST=SU",
+		}),
+	);
+	const monday = starts(
+		expand({
+			start: WEDNESDAY,
+			rule: "FREQ=WEEKLY;BYDAY=SU,MO;INTERVAL=2;COUNT=6;WKST=MO",
+		}),
+	);
+
+	assert.deepEqual(sunday, [
+		"2099-04-12T18:00:00Z",
+		"2099-04-13T18:00:00Z",
+		"2099-04-26T18:00:00Z",
+		"2099-04-27T18:00:00Z",
+		"2099-05-10T18:00:00Z",
+		"2099-05-11T18:00:00Z",
+	]);
+	assert.deepEqual(monday, [
+		"2099-04-05T18:00:00Z",
+		"2099-04-13T18:00:00Z",
+		"2099-04-19T18:00:00Z",
+		"2099-04-27T18:00:00Z",
+		"2099-05-03T18:00:00Z",
+		"2099-05-11T18:00:00Z",
+	]);
+	assert.notDeepEqual(sunday, monday, "WKST must not be inert");
+});
+
+test("MONTHLY with INTERVAL crosses years, including a non-leap century", () => {
+	assert.deepEqual(
+		starts(
+			expand({ start: WEDNESDAY, rule: "FREQ=MONTHLY;INTERVAL=4;COUNT=5" }),
+		),
+		[
+			"2099-04-01T18:00:00Z",
+			"2099-08-01T18:00:00Z",
+			"2099-12-01T18:00:00Z",
+			"2100-04-01T18:00:00Z",
+			"2100-08-01T18:00:00Z",
+		],
+	);
+});
+
+test("a 31st monthly lands only in the months that have one", () => {
+	assert.deepEqual(
+		starts(
+			expand({
+				start: {
+					kind: "instant",
+					value: "2099-03-31T12:00:00Z",
+					timeZone: undefined,
+				},
+				rule: "FREQ=MONTHLY;COUNT=6",
+			}),
+		),
+		[
+			"2099-03-31T12:00:00Z",
+			"2099-05-31T12:00:00Z",
+			"2099-07-31T12:00:00Z",
+			"2099-08-31T12:00:00Z",
+			"2099-10-31T12:00:00Z",
+			"2099-12-31T12:00:00Z",
+		],
+	);
+});
