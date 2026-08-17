@@ -1,15 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { apiKey } from "../src/auth.ts";
+import { apiKey } from "../../src/auth.ts";
 import {
 	fetchEvents,
 	listEvents,
 	normaliseEvents,
 	type EventResource,
-} from "../src/calendar.ts";
-import { recordConsole } from "./support/console.ts";
-import { serve } from "./support/serve.ts";
+} from "../../src/calendar/google.ts";
+import { recordConsole } from "../support/console.ts";
+import { serve } from "../support/serve.ts";
 
 // What the transport ASKS for, how it walks pages, and what the normaliser makes
 // of the answer. Nothing here formats a date or knows what "now" is — a consumer

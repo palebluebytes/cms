@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { apiKey } from "../src/auth.ts";
+import { apiKey } from "../../src/auth.ts";
 import {
 	fetchBytes,
 	fetchPhotos,
@@ -9,9 +9,9 @@ import {
 	normalisePhotos,
 	type DriveFile,
 	type ImageMediaMetadata,
-} from "../src/drive.ts";
-import { recordConsole } from "./support/console.ts";
-import { serve, serveBytes } from "./support/serve.ts";
+} from "../../src/files/google.ts";
+import { recordConsole } from "../support/console.ts";
+import { serve, serveBytes } from "../support/serve.ts";
 
 // Transport, normaliser and delivery. `listFiles` and `fetchBytes` take their
 // `fetch` as an option, so nothing here touches `globalThis.fetch` or the

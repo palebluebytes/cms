@@ -6,15 +6,15 @@
  * clock, and both belong to the site. See the README's "What this package does
  * not do".
  *
- * Nothing here assumes the Drive half is in use, either: a calendar-only
- * consumer never imports `@palebluebytes/google-cms/drive`.
+ * Nothing here assumes the files half is in use, either: a calendar-only
+ * consumer never imports `@palebluebytes/google-cms/files/google`.
  */
 
 // `.js` on the type-only import, `.ts` on the value import: see the note in
 // `internal/require-auth.ts`.
-import type { Auth, FetchLike } from "./auth.js";
-import { pages } from "./internal/page-walk.ts";
-import { requireAuth } from "./internal/require-auth.ts";
+import type { Auth, FetchLike } from "../auth.js";
+import { pages } from "../internal/page-walk.ts";
+import { requireAuth } from "../internal/require-auth.ts";
 
 // 2500 is the API's ceiling; its DEFAULT is 250, which is the size of the tail a
 // growing calendar loses to a single un-paginated request.

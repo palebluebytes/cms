@@ -4,6 +4,18 @@ The shape — `listFiles` / `normalisePhotos` / `fetchPhotos`, and what each hal
 is for — is in [`README.md`](../../README.md#transport-normaliser-composition).
 The traps are here.
 
+## One directory per resource, one file per provider
+
+`src/calendar/google.ts` and `src/files/google.ts`, each reachable as its own
+entry point (`/calendar/google`, `/files/google`). A directory is one resource and
+the files in it are interchangeable implementations of it, which is what makes
+"every provider in `src/calendar/` passes the same test file" a sentence that
+means something — [`ADR-0004`](../adr/0004-a-resource-may-have-more-than-one-provider.md).
+
+Both providers are Google's today, so nothing yet enforces the interchangeability
+the layout implies. A `dist` path in the export map, not a `src` one: see
+[`typescript-build.md`](typescript-build.md).
+
 ## The two transports mirror each other on purpose
 
 `listFiles` and `listEvents` follow the same outline and share almost no code.
@@ -11,7 +23,8 @@ Extracting a `resource()` that constructs both was considered and rejected in
 [`ADR-0003`](../adr/0003-the-resource-shape-is-a-convention.md): it would take six
 parameters to save six lines twice. Adding a third resource means writing the
 outline again — and naming it in `PageWalkLabel`, and remembering `requireAuth`,
-neither of which anything enforces.
+neither of which anything enforces. A second provider of an existing resource
+means the same, minus `PageWalkLabel` if it has no page walk to label.
 
 ## Nothing crosses the seam that belongs to a site
 
@@ -35,8 +48,8 @@ A `console.warn` is the one that got in, precisely because it is none of those
 four — it lived in `displayDimensions` until
 [`ADR-0002`](../adr/0002-the-normalisers-report-nothing.md). Neither normaliser
 reports anything now, and each has a test that fails if it starts: `recordConsole`
-from `test/support/console.ts`, once in `test/drive.test.ts` and once in
-`test/calendar.test.ts`.
+from `test/support/console.ts`, once in `test/files/google.test.ts` and once in
+`test/calendar/google.test.ts`.
 
 ## The page walk is one module, and it is not in the transports
 
@@ -56,7 +69,7 @@ by the page walk for every page and by `fetchBytes` for its single download. The
 
 `send` has no test file of its own, deliberately: it holds a template string and
 an `if`, and both are already pinned where they are visible — the exact non-OK
-sentence in `test/page-walk.test.ts`, the status in `test/drive.test.ts`, and the
+sentence in `test/page-walk.test.ts`, the status in `test/files/google.test.ts`, and the
 credential reaching every page in both. A test that only proved interpolation
 works would be testing the extraction rather than the behaviour.
 
@@ -77,7 +90,7 @@ The label it takes is a closed union — adding a transport means naming it in
 
 `fields=files(...)` omits `nextPageToken`, and the page walk then stops after one
 page. A folder of 1500 files silently becomes 1000, with no error anywhere. The
-mask is built as `nextPageToken,files(...)` and `test/drive.test.ts` pins it.
+mask is built as `nextPageToken,files(...)` and `test/files/google.test.ts` pins it.
 
 ## Google's defaults are wrong in three specific ways
 

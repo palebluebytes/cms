@@ -13,13 +13,13 @@
 		"registry": "https://npm.pkg.github.com"
 	},
 	"exports": {
-		"./drive": {
-			"types": "./dist/drive.d.ts",
-			"default": "./dist/drive.js"
+		"./files/google": {
+			"types": "./dist/files/google.d.ts",
+			"default": "./dist/files/google.js"
 		},
-		"./calendar": {
-			"types": "./dist/calendar.d.ts",
-			"default": "./dist/calendar.js"
+		"./calendar/google": {
+			"types": "./dist/calendar/google.d.ts",
+			"default": "./dist/calendar/google.js"
 		},
 		"./auth": {
 			"types": "./dist/auth.d.ts",

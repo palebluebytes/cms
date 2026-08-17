@@ -34,7 +34,7 @@ over, not a promise that everything Google sent is accounted for in the output.
 Neither normaliser has any effect other than its return value. `console` is in
 `lib.dom` and so a call to it compiles clean inside `src`, which makes this a
 constraint whose violation produces no error — the shape `AGENTS.md` is built
-around. The guard is a test in `test/drive.test.ts` that poisons all five
+around. The guard is a test in `test/files/google.test.ts` that poisons all five
 `console` methods across the missing-dimensions path and asserts none was
 reached for. It mutates a global to enforce the seam, which is the inverse of the
 `captureWarnings` helper it replaced.

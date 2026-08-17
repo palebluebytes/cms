@@ -10,10 +10,10 @@
 
 // The type-only import says `.js` and the value import says `.ts`, deliberately:
 // see the note in `internal/require-auth.ts`.
-import type { Auth, FetchLike } from "./auth.js";
-import { pages } from "./internal/page-walk.ts";
-import { requireAuth } from "./internal/require-auth.ts";
-import { send } from "./internal/send.ts";
+import type { Auth, FetchLike } from "../auth.js";
+import { pages } from "../internal/page-walk.ts";
+import { requireAuth } from "../internal/require-auth.ts";
+import { send } from "../internal/send.ts";
 
 // Everything a gallery needs, in ONE listing call. `imageMediaMetadata` rides
 // along with only an API key, so build-time aspect ratios cost no extra request

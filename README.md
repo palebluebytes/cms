@@ -35,20 +35,27 @@ Create a token with the `read:packages` scope, then an `.npmrc`:
 
 ## Entry points
 
-There is no root entry point; import the half you use.
+There is no root entry point. An entry point is one **resource** — a folder of
+files, a calendar — read through one **provider**, and you import the pairing you
+want:
 
 ```
-@palebluebytes/google-cms/drive       fetchPhotos · listFiles · normalisePhotos · fetchBytes
-@palebluebytes/google-cms/calendar    fetchEvents · listEvents · normaliseEvents
-@palebluebytes/google-cms/auth        apiKey · bearer
+@palebluebytes/google-cms/files/google       fetchPhotos · listFiles · normalisePhotos · fetchBytes
+@palebluebytes/google-cms/calendar/google    fetchEvents · listEvents · normaliseEvents
+@palebluebytes/google-cms/auth               apiKey · bearer
 ```
+
+The provider is chosen by the import path and by nothing else — there is no
+registry and no `{ provider }` option, because a site knows at build time which
+backend it reads. Both providers are Google's today; see
+[`ADR-0004`](docs/adr/0004-a-resource-may-have-more-than-one-provider.md).
 
 Every operation is reachable in a **single expression**, deliberately: an
 Eleventy `_data/*.js` module may export only `default`, and a module that has to
 construct a client first cannot be one expression.
 
 ```js
-import { fetchPhotos } from "@palebluebytes/google-cms/drive";
+import { fetchPhotos } from "@palebluebytes/google-cms/files/google";
 import { apiKey } from "@palebluebytes/google-cms/auth";
 
 export default () =>
@@ -109,14 +116,14 @@ fetchEvents({ calendarId, auth: (request) => myPreAuthedRewrite(request) });
 ```
 
 A built-in `serviceAccount({clientEmail, privateKey})` may ship later, from
-`/auth` so that `/drive` and `/calendar` stay at zero dependencies whatever it
+`/auth` so that every provider entry point stays at zero dependencies whatever it
 ends up depending on. It is absent today because the prior art
 (`google-auth-library`, `gtoken`, `jose`) has not been surveyed, and the honest
 answer may be "use one of those".
 
 ---
 
-## `/drive`
+## `/files/google`
 
 ```js
 const photos = await fetchPhotos({ folderId, auth });
@@ -219,7 +226,7 @@ returned order carries no meaning** — sort it yourself.
 
 ---
 
-## `/calendar`
+## `/calendar/google`
 
 ```js
 const events = await fetchEvents({ calendarId, auth });
