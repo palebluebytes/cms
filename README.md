@@ -74,6 +74,27 @@ reads **no environment variables** — `process.env` does not exist on every tar
 runtime, and an env var read inside a dependency is invisible coupling. Read your
 own environment and pass the value in.
 
+**`auth` runs immediately before each send, outside your `fetch`.** Every request
+gets the credential — every page of a walk, not just the first — but the ordering
+has one consequence worth knowing: a `fetch` of your own that retries internally
+resends the `Request` it was given, credential included. A `bearer` factory is
+**not** consulted again for that retry, so a token that expired mid-walk stays
+expired. If a retry needs a fresh credential, own the whole exchange instead:
+
+```js
+// Everything in `fetch`, so each attempt mints its own token. `auth` still has
+// to be a function, and identity is the honest one to pass.
+fetchPhotos({
+  folderId,
+  auth: (request) => request,
+  fetch: async (request) => {
+    const attempt = async () => fetch(await bearer(mintToken)(request));
+    const first = await attempt();
+    return first.status === 401 ? attempt() : first;
+  },
+});
+```
+
 ### Service accounts
 
 Not shipped, and not needed to use one: the `Auth` type **is** the escape hatch.

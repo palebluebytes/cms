@@ -31,11 +31,29 @@ reports anything now, and `test/drive.test.ts` fails if one starts.
 
 `listFiles` and `listEvents` say what one page's URL is and hand it to
 [`src/internal/page-walk.ts`](../../src/internal/page-walk.ts). The loop, the
-`maxPages` cap, applying the credential, the response check and the refusal to
-follow a repeated `pageToken` all live there, tested in
-`test/page-walk.test.ts` — not through either transport. A fix belongs in the
-walk, and a third transport gets the guards by construction rather than by
+`maxPages` cap and the refusal to follow a repeated `pageToken` all live there,
+tested in `test/page-walk.test.ts` — not through either transport. A fix belongs
+in the walk, and a third transport gets the guards by construction rather than by
 being copied from one of these two.
+
+## Applying the credential is one module below that
+
+Constructing the `Request`, applying `auth`, sending it and refusing a non-OK
+answer are [`src/internal/send.ts`](../../src/internal/send.ts) — one call, made
+by the page walk for every page and by `fetchBytes` for its single download. The
+`fetch` default lives there and only there.
+
+`send` has no test file of its own, deliberately: it holds a template string and
+an `if`, and both are already pinned where they are visible — the exact non-OK
+sentence in `test/page-walk.test.ts`, the status in `test/drive.test.ts`, and the
+credential reaching every page in both. A test that only proved interpolation
+works would be testing the extraction rather than the behaviour.
+
+The caller supplies the verb phrase (`read folder`, `download Drive file <id>`)
+because only it knows its own noun; what `send` owns is the
+`Failed to …: <status> <statusText>` around it. A new caller that invents a
+different sentence shape has taken a decision that belongs to
+[`ADR-0001`](../adr/0001-errors-carry-messages-not-codes.md).
 
 What stays with a transport is what Google gets wrong per API: the field mask
 below, and the three defaults after it. The walk knows one field name,
