@@ -1,0 +1,58 @@
+{
+	// The package's own build: `src` in, `dist` out. What ships is plain ESM
+	// JavaScript plus declarations — a consumer never sees a .ts file.
+	"compilerOptions": {
+		"target": "es2023",
+
+		// `dom` is here for `fetch`, `Request`, `Headers`, `URL` and `console`.
+		// `"types": []` then keeps @types/node out of `src`, so `Buffer`,
+		// `process.env` and `node:` imports do not typecheck.
+		//
+		// That closes the Node half of the audience rule and ONLY the Node half:
+		// `dom` also admits `document`, `localStorage` and `window`, which are
+		// just as absent from Workers and Deno Deploy and which compile clean
+		// here. Closing that half needs hand-written ambients in place of `dom`
+		// — a mini lib.dom to maintain — so for now it stays a review job. See
+		// AGENTS.md.
+		"lib": ["es2023", "dom"],
+		"types": [],
+
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
+		"rootDir": "src",
+		"outDir": "dist",
+
+		"declaration": true,
+		"declarationMap": true,
+		"sourceMap": true,
+
+		// Source imports carry `.ts` specifiers so Node can run them directly
+		// under type stripping (that is what `npm test` does); the emit rewrites
+		// them to `.js` for the published files.
+		"allowImportingTsExtensions": true,
+		"rewriteRelativeImportExtensions": true,
+
+		// Every file must be understandable on its own, because Node's type
+		// stripping erases types one file at a time and cannot resolve an enum or
+		// a namespace across the seam. `erasableSyntaxOnly` bans the syntax that
+		// would need more than erasure.
+		"verbatimModuleSyntax": true,
+		"erasableSyntaxOnly": true,
+		"isolatedModules": true,
+
+		"strict": true,
+
+		// A binding with no reader is an invitation to find a use for it, which is
+		// how a `console.warn` kept its filename parameter alive inside the pure
+		// half (ADR-0002). This file's whole job is turning review findings into
+		// compile errors, and that one had no reason to be the exception. Both are
+		// clean today, in `src` and in the test program that extends this config.
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+
+		"noImplicitOverride": true,
+		"noFallthroughCasesInSwitch": true,
+		"skipLibCheck": true
+	},
+	"include": ["src"]
+}

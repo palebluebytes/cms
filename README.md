@@ -14,6 +14,23 @@ Runs on **Node 22+, Deno, Bun and edge runtimes** (Workers, Vercel). It uses
 `fetch`, `Request` and `Uint8Array` and nothing else — no `node:` imports, no
 `Buffer`, no `process.env`.
 
+Written in TypeScript and published as plain ESM with type declarations, so a
+JavaScript consumer needs no build step and a TypeScript one needs no
+`@types/` package.
+
+## Installing from GitHub Packages
+
+This package is published to GitHub Packages, which requires authentication to
+_install_ even though the repo is public. Without it the install fails with a
+bare 401 that reads like the package doesn't exist.
+
+Create a token with the `read:packages` scope, then an `.npmrc`:
+
+```
+@palebluebytes:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
 ---
 
 ## Entry points
@@ -40,8 +57,8 @@ export default () =>
 
 ## Auth is one type
 
-```js
-/** @typedef {(request: Request) => Request | Promise<Request>} Auth */
+```ts
+type Auth = (request: Request) => Request | Promise<Request>;
 ```
 
 A `Request` in, an authorised `Request` out. Everything reduces to it, including
@@ -56,6 +73,27 @@ models this package does not ship.
 reads **no environment variables** — `process.env` does not exist on every target
 runtime, and an env var read inside a dependency is invisible coupling. Read your
 own environment and pass the value in.
+
+**`auth` runs immediately before each send, outside your `fetch`.** Every request
+gets the credential — every page of a walk, not just the first — but the ordering
+has one consequence worth knowing: a `fetch` of your own that retries internally
+resends the `Request` it was given, credential included. A `bearer` factory is
+**not** consulted again for that retry, so a token that expired mid-walk stays
+expired. If a retry needs a fresh credential, own the whole exchange instead:
+
+```js
+// Everything in `fetch`, so each attempt mints its own token. `auth` still has
+// to be a function, and identity is the honest one to pass.
+fetchPhotos({
+  folderId,
+  auth: (request) => request,
+  fetch: async (request) => {
+    const attempt = async () => fetch(await bearer(mintToken)(request));
+    const first = await attempt();
+    return first.status === 401 ? attempt() : first;
+  },
+});
+```
 
 ### Service accounts
 
@@ -110,6 +148,13 @@ photos lay out as landscape. `width`/`height` are nullable and `ratio` is not:
 the 1:1 fallback is a stated assumption you can lay out against, whereas
 fabricated pixel counts would be a lie you could not detect.
 
+Nothing is logged when dimensions are missing — whether that is worth mentioning
+during a build is yours to decide, and the returned data already says so:
+
+```js
+const undimensioned = photos.filter((p) => p.width === null).map((p) => p.name);
+```
+
 **`caption` is never empty**, so you can safely render `alt=""` and let a
 figcaption be the text alternative. Refining `name` into something pretty —
 stripping a numeric prefix, swapping separators for spaces — is a site
@@ -153,6 +198,10 @@ Unguarded, that HTML gets cached as image bytes and fails somewhere far away.
 | `fetch`       | Your own fetch — the integration-test seam, or a pre-authed one |
 | `maxPages`    | Backstop on the page walk (default 10 × 1000 files)             |
 
+`fetch` is typed as `FetchLike` — `(request: Request) => Promise<Response>` —
+because that is all this package ever calls. The global satisfies it, and so does
+a two-line double that records the `Request` it was handed.
+
 Both merges are deliberate inversions of `@localnerve/google-drive-folder`, whose
 field list is a hard-coded literal with no passthrough — so build-time aspect
 ratios are simply unreachable — and whose `fileQuery` _replaces_ its
@@ -178,17 +227,20 @@ const events = await fetchEvents({ calendarId, auth });
 
 ### `CalendarEvent`
 
-| Field         | Type                | Notes                                                |
-| ------------- | ------------------- | ---------------------------------------------------- |
-| `id`          | string              |                                                      |
-| `summary`     | string              |                                                      |
-| `description` | string              | `""` when unset                                      |
-| `location`    | string              | `""` when unset                                      |
-| `isAllDay`    | boolean             |                                                      |
-| `isMultiDay`  | boolean             | Computed **after** the inclusive-end correction      |
-| `start`       | string              | ISO — see below                                      |
-| `end`         | string              | ISO, **inclusive** — see below                       |
-| `timeZone`    | string \| undefined | Event's own, else the calendar's, else **undefined** |
+| Field         | Type                | Notes                                                  |
+| ------------- | ------------------- | ------------------------------------------------------ |
+| `id`          | string              |                                                        |
+| `summary`     | string \| undefined | `undefined` for an untitled event — Google omits it    |
+| `description` | string              | `""` when unset                                        |
+| `location`    | string              | `""` when unset                                        |
+| `isAllDay`    | boolean             |                                                        |
+| `isMultiDay`  | boolean             | Computed **after** the inclusive-end correction        |
+| `start`       | string              | ISO — see below                                        |
+| `end`         | string \| undefined | ISO, **inclusive** — `undefined` if Google sent no end |
+| `timeZone`    | string \| undefined | Event's own, else the calendar's, else **undefined**   |
+
+Events Google sends with no usable `start` — and cancelled ones — are dropped,
+so `start` is always a string on an event you get back.
 
 **Strings, not `Date`s.** An all-day event is a _floating_ date: it has no
 instant, and `new Date("2026-05-13")` invents one at UTC midnight. `isAllDay`
@@ -282,9 +334,15 @@ returns `[]`.
 ## Testing
 
 ```bash
-pnpm install   # prettier, the only devDependency
-npm test       # node --test, no network, no key
+pnpm test        # node --test over the .ts sources; no install, no network, no key
+pnpm install     # prettier, typescript, @types/node — dev only, nothing ships
+pnpm typecheck   # tsc; type stripping runs the tests, it does not check them
+pnpm build       # tsc → dist/, which is what publishing ships
 ```
+
+Node runs the TypeScript directly by stripping the types, so the test command
+needs nothing installed — but it also never typechecks, which is why `typecheck`
+is its own step here and its own job in CI.
 
 ## Licence
 

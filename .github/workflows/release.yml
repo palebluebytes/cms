@@ -58,12 +58,19 @@ jobs:
           registry-url: https://npm.pkg.github.com
           scope: "@palebluebytes"
 
+      # TypeScript has to be here now: `prepack` compiles `src` into the `dist`
+      # that is the published package, and nothing is committed.
+      - run: pnpm install --frozen-lockfile
+
       # Last gate before the version becomes immutable. GitHub Packages does
-      # not allow republishing a version, so a bad publish is permanent.
-      - run: node --test "test/**/*.test.js"
+      # not allow republishing a version, so a bad publish is permanent. No
+      # separate typecheck: `prepack` below compiles `src`, so a type error in
+      # what ships already fails the publish.
+      - run: node --test "test/**/*.test.ts"
 
       # --no-git-checks: the checkout above is a detached HEAD at the tag, and
       # pnpm otherwise refuses to publish from anything but a clean branch.
+      # `prepack` runs `tsc` here — this is where `dist` comes from.
       - run: pnpm publish --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,19 @@
+{
+	// Typechecking only — the tests are never emitted. Node runs the .ts files
+	// as they are, stripping the types.
+	"extends": "../tsconfig.json",
+	"compilerOptions": {
+		// The tests DO get Node's types: they import `node:test`, and one of them
+		// asserts `Buffer.isBuffer(bytes)` is false, which needs `Buffer` to exist
+		// as a name.
+		//
+		// This program also contains the `src` files the tests import, and they
+		// see `node` here too — so this config does NOT enforce the audience rule
+		// and cannot be the only one that runs. `pnpm typecheck` runs the root
+		// config first, where `src` is checked without Node's types.
+		"types": ["node"],
+		"rootDir": "..",
+		"noEmit": true
+	},
+	"include": ["."]
+}

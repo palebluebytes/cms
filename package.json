@@ -13,20 +13,34 @@
 		"registry": "https://npm.pkg.github.com"
 	},
 	"exports": {
-		"./drive": "./src/drive.js",
-		"./calendar": "./src/calendar.js",
-		"./auth": "./src/auth.js",
+		"./drive": {
+			"types": "./dist/drive.d.ts",
+			"default": "./dist/drive.js"
+		},
+		"./calendar": {
+			"types": "./dist/calendar.d.ts",
+			"default": "./dist/calendar.js"
+		},
+		"./auth": {
+			"types": "./dist/auth.d.ts",
+			"default": "./dist/auth.js"
+		},
 		"./package.json": "./package.json"
 	},
 	"files": [
+		"dist",
 		"src"
 	],
 	"engines": {
 		"node": ">=22"
 	},
 	"scripts": {
-		"test": "node --test \"test/**/*.test.js\"",
-		"format": "prettier --write ."
+		"clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+		"build": "node --run clean && tsc",
+		"typecheck": "tsc --noEmit && tsc -p test",
+		"test": "node --test \"test/**/*.test.ts\"",
+		"format": "prettier --write .",
+		"prepack": "node --run build"
 	},
 	"keywords": [
 		"google-drive",
@@ -40,7 +54,9 @@
 		"zero-dependency"
 	],
 	"devDependencies": {
-		"prettier": "^3.6.2"
+		"@types/node": "^26.2.0",
+		"prettier": "^3.6.2",
+		"typescript": "^7.0.2"
 	},
 	"packageManager": "pnpm@10.34.5"
 }

@@ -1,34 +1,40 @@
-import test, { afterEach } from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 
-import { apiKey } from "../src/auth.js";
+import { apiKey } from "../src/auth.ts";
 import {
 	fetchBytes,
 	fetchPhotos,
 	listFiles,
 	normalisePhotos,
-} from "../src/drive.js";
+	type DriveFile,
+	type ImageMediaMetadata,
+} from "../src/drive.ts";
+import { recordConsole } from "./support/console.ts";
+import { serve, serveBytes } from "./support/serve.ts";
 
 // Transport, normaliser and delivery. `listFiles` and `fetchBytes` take their
 // `fetch` as an option, so nothing here touches `globalThis.fetch` or the
 // network — and `normalisePhotos` is pure, so the interesting half needs no seam
 // at all.
 
-const realWarn = console.warn;
-
-afterEach(() => {
-	console.warn = realWarn;
-});
-
-function captureWarnings() {
-	const warnings = [];
-	console.warn = (msg) => warnings.push(msg);
-	return warnings;
+// The knobs the fixtures below turn. `width`/`height`/`rotation` are folded into
+// an `imageMediaMetadata` block; everything else is a raw field.
+interface FileExtras {
+	id?: string;
+	mimeType?: string;
+	description?: string;
+	modifiedTime?: string;
+	webContentLink?: string | undefined;
+	width?: number;
+	height?: number;
+	rotation?: number;
+	imageMediaMetadata?: ImageMediaMetadata | undefined;
 }
 
 // A raw `files.list` entry, with dimensions defaulting to a square so cases that
 // are not about ratios need not carry them.
-function file(name, extra = {}) {
+function file(name: string, extra: FileExtras = {}): DriveFile {
 	const { width = 1000, height = 1000, rotation, ...rest } = extra;
 	const id = rest.id ?? `id-${name}`;
 	return {
@@ -48,14 +54,13 @@ function file(name, extra = {}) {
 	};
 }
 
-// Answer every request with the same payload, recording what was asked for.
-function serve(payload, { ok = true, status = 200, statusText = "OK" } = {}) {
-	const requested = [];
-	const fetch = async (request) => {
-		requested.push(new URL(request.url));
-		return { ok, status, statusText, json: async () => payload };
-	};
-	return { fetch, requested };
+// `searchParams.get` is nullable and the assertions below want a string. Asking
+// for a parameter that is not there is a failure either way; this just says so
+// at the point it happens.
+function param(url: URL, name: string): string {
+	const value = url.searchParams.get(name);
+	assert.ok(value !== null, `no ${name} parameter in ${url}`);
+	return value;
 }
 
 const auth = apiKey("test-key");
@@ -108,9 +113,7 @@ test("width and height are the DISPLAYED pixels, swapped with the axes", () => {
 	);
 });
 
-test("missing dimensions fall back to a 1:1 ratio with a warning, never a failure", () => {
-	const warnings = captureWarnings();
-
+test("missing dimensions fall back to a 1:1 ratio, never a failure", () => {
 	const photos = normalisePhotos({
 		files: [
 			file("no-metadata.jpg", { imageMediaMetadata: undefined }),
@@ -125,14 +128,11 @@ test("missing dimensions fall back to a 1:1 ratio with a warning, never a failur
 	assert.equal(photos[1].ratio, 1);
 	assert.equal(photos[2].ratio, 1);
 	assert.equal(photos[3].ratio, 2);
-	assert.equal(warnings.length, 3, "one warning per photo without dimensions");
-	assert.ok(warnings.every((w) => w.includes("assuming 1:1")));
 });
 
 test("width and height are null when dimensions are missing, but ratio never is", () => {
 	// Fabricating pixel counts would be a lie the consumer cannot detect; a 1:1
 	// ratio is a stated fallback it can lay out against.
-	captureWarnings();
 	const [photo] = normalisePhotos({
 		files: [file("no-metadata.jpg", { imageMediaMetadata: undefined })],
 	});
@@ -142,8 +142,22 @@ test("width and height are null when dimensions are missing, but ratio never is"
 	assert.equal(photo.ratio, 1);
 });
 
+test("normalisePhotos has no effect other than its return value", () => {
+	// `console` is in `lib.dom` and therefore compiles clean inside `src`, so this
+	// test is the only thing standing between the pure half and a log line — the
+	// shape of trap AGENTS.md is built around. The path exercised is the one that
+	// used to warn: a file Drive sent no dimensions for. See
+	// `docs/adr/0002-the-normalisers-report-nothing.md`.
+	const said = recordConsole(() =>
+		normalisePhotos({
+			files: [file("no-metadata.jpg", { imageMediaMetadata: undefined })],
+		}),
+	);
+
+	assert.deepEqual(said, [], "the normaliser reached for the console");
+});
+
 test("caption is never empty: the description, else the filename", () => {
-	captureWarnings();
 	const photos = normalisePhotos({
 		files: [
 			file("1 - x.jpg", { description: "  My caption  " }),
@@ -217,11 +231,11 @@ test("an empty or absent file list normalises to an empty array", () => {
 test("the query scopes to the folder and excludes the trash — and nothing else", async () => {
 	// WHICH files are wanted is the caller's decision, so the base query says
 	// nothing about mimeType.
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
-	const q = requested[0].searchParams.get("q");
+	const q = param(requested[0], "q");
 	assert.match(q, /'folder-id' in parents/);
 	assert.match(q, /trashed = false/);
 	assert.ok(!q.includes("mimeType"), "no mimeType clause of its own");
@@ -229,17 +243,17 @@ test("the query scopes to the folder and excludes the trash — and nothing else
 
 test("imageMediaMetadata and webContentLink ride along on the listing call", async () => {
 	// Both cost no extra request, which is the finding the whole gallery rests on.
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
-	const fields = requested[0].searchParams.get("fields");
+	const fields = param(requested[0], "fields");
 	assert.match(fields, /imageMediaMetadata\(width,height,rotation\)/);
 	assert.match(fields, /webContentLink/);
 });
 
 test("the walk is ordered by name, which is transport determinism, not display order", async () => {
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
@@ -247,7 +261,7 @@ test("the walk is ordered by name, which is transport determinism, not display o
 });
 
 test("the auth is applied — the key reaches the request", async () => {
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
@@ -255,7 +269,7 @@ test("the auth is applied — the key reaches the request", async () => {
 });
 
 test("extraFields MERGE into the field list rather than replacing it", async () => {
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({
 		folderId: FOLDER,
@@ -264,13 +278,13 @@ test("extraFields MERGE into the field list rather than replacing it", async () 
 		extraFields: ["thumbnailLink"],
 	});
 
-	const fields = requested[0].searchParams.get("fields");
+	const fields = param(requested[0], "fields");
 	assert.match(fields, /thumbnailLink/);
 	assert.match(fields, /imageMediaMetadata/, "the base fields survive");
 });
 
 test("extraQuery is AND-ed onto the base q rather than replacing it", async () => {
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({
 		folderId: FOLDER,
@@ -279,27 +293,16 @@ test("extraQuery is AND-ed onto the base q rather than replacing it", async () =
 		extraQuery: "name contains 'launch'",
 	});
 
-	const q = requested[0].searchParams.get("q");
+	const q = param(requested[0], "q");
 	assert.match(q, /name contains 'launch'/);
 	assert.match(q, /trashed = false/, "the base query survives");
 });
 
-test("throws on a non-OK response", async () => {
-	const { fetch } = serve(
-		{},
-		{ ok: false, status: 403, statusText: "Forbidden" },
-	);
-
-	await assert.rejects(
-		() => listFiles({ folderId: FOLDER, auth, fetch }),
-		/403/,
-	);
-});
-
 test("throws immediately when no auth was passed", async () => {
-	const { fetch } = serve({ files: [] });
+	const { fetch } = serve([{ files: [] }]);
 
 	await assert.rejects(
+		// @ts-expect-error — the omission the runtime guard exists for
 		() => listFiles({ folderId: FOLDER, fetch }),
 		/auth/i,
 		"the message has to name the constructors — this module reads no env",
@@ -308,37 +311,27 @@ test("throws immediately when no auth was passed", async () => {
 
 // ------------------------------------------------------------------ pagination
 
-// Serve the given pages in order, recording every URL asked for.
-function servePages(...pages) {
-	const requested = [];
-	let call = 0;
-	const fetch = async (request) => {
-		requested.push(new URL(request.url));
-		const page = pages[Math.min(call++, pages.length - 1)];
-		return { ok: true, status: 200, statusText: "OK", json: async () => page };
-	};
-	return { fetch, requested };
-}
+// The walk itself — the cap, a repeated token, a non-OK page — is
+// `internal/page-walk.ts` and is tested in `test/page-walk.test.ts`. What
+// belongs here is what Drive gets wrong: the mask that makes the walk possible
+// at all, and that this transport keeps every page it is handed.
 
 test("nextPageToken is in the field mask — without it the walk cannot happen", async () => {
 	// A `fields=files(...)` mask OMITS nextPageToken, and then a folder past the
 	// first page is silently truncated with no error anywhere. This is the whole
 	// reason pagination is a trap rather than a loop.
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
-	assert.match(
-		requested[0].searchParams.get("fields"),
-		/^nextPageToken,files\(/,
-	);
+	assert.match(param(requested[0], "fields"), /^nextPageToken,files\(/);
 });
 
 test("follows nextPageToken and keeps every page's files", async () => {
-	const { fetch, requested } = servePages(
+	const { fetch, requested } = serve([
 		{ files: [file("1 - a.jpg")], nextPageToken: "token-2" },
 		{ files: [file("2 - b.jpg")] },
-	);
+	]);
 
 	const { files } = await listFiles({ folderId: FOLDER, auth, fetch });
 
@@ -352,65 +345,14 @@ test("follows nextPageToken and keeps every page's files", async () => {
 });
 
 test("asks for the largest page the API allows", async () => {
-	const { fetch, requested } = serve({ files: [] });
+	const { fetch, requested } = serve([{ files: [] }]);
 
 	await listFiles({ folderId: FOLDER, auth, fetch });
 
 	assert.equal(requested[0].searchParams.get("pageSize"), "1000");
 });
 
-test("throws rather than truncating when Drive repeats a pageToken", async () => {
-	const { fetch } = servePages({
-		files: [file("1 - a.jpg")],
-		nextPageToken: "same-token",
-	});
-
-	await assert.rejects(
-		() => listFiles({ folderId: FOLDER, auth, fetch }),
-		/pageToken/,
-	);
-});
-
-test("throws rather than paging forever past the cap", async () => {
-	let n = 0;
-	let calls = 0;
-	const fetch = async () => {
-		calls++;
-		return {
-			ok: true,
-			status: 200,
-			statusText: "OK",
-			json: async () => ({ files: [], nextPageToken: `token-${++n}` }),
-		};
-	};
-
-	await assert.rejects(
-		() => listFiles({ folderId: FOLDER, auth, fetch, maxPages: 3 }),
-		/too many pages/i,
-	);
-	assert.equal(calls, 3, "it stops at the caller's cap, not the default");
-});
-
 // ------------------------------------------------------------------ fetchBytes
-
-// A media response: bytes plus the headers the guard reads.
-function serveBytes(
-	body,
-	{ ok = true, status = 200, statusText = "OK", type = "image/jpeg" } = {},
-) {
-	const requested = [];
-	const fetch = async (request) => {
-		requested.push(new URL(request.url));
-		return {
-			ok,
-			status,
-			statusText,
-			headers: new Headers({ "content-type": type }),
-			arrayBuffer: async () => new TextEncoder().encode(body).buffer,
-		};
-	};
-	return { fetch, requested };
-}
 
 test("fetchBytes downloads alt=media, authorised, and returns a Uint8Array", async () => {
 	// NOT a Buffer: Buffer is Node-only and this package targets any runtime.
@@ -439,11 +381,7 @@ test("fetchBytes takes a whole Photo as happily as an id", async () => {
 });
 
 test("fetchBytes throws on a non-OK response", async () => {
-	const { fetch } = serveBytes("", {
-		ok: false,
-		status: 404,
-		statusText: "Not Found",
-	});
+	const { fetch } = serveBytes("", { status: 404, statusText: "Not Found" });
 
 	await assert.rejects(
 		() => fetchBytes({ id: "abc123" }, { auth, fetch }),
@@ -468,15 +406,19 @@ test("fetchBytes throws on the 200 text/html sign-in page", async () => {
 test("fetchBytes throws immediately when no auth was passed", async () => {
 	const { fetch } = serveBytes("BYTES");
 
-	await assert.rejects(() => fetchBytes({ id: "abc123" }, { fetch }), /auth/i);
+	await assert.rejects(
+		// @ts-expect-error — the omission the runtime guard exists for
+		() => fetchBytes({ id: "abc123" }, { fetch }),
+		/auth/i,
+	);
 });
 
 // ------------------------------------------------------------------ fetchPhotos
 
 test("fetchPhotos is listFiles then normalisePhotos", async () => {
-	const { fetch } = serve({
-		files: [file("1 - x.jpg", { id: "abc", width: 1000, height: 500 })],
-	});
+	const { fetch } = serve([
+		{ files: [file("1 - x.jpg", { id: "abc", width: 1000, height: 500 })] },
+	]);
 
 	const photos = await fetchPhotos({ folderId: FOLDER, auth, fetch });
 
@@ -489,7 +431,7 @@ test("an empty listing returns [] rather than throwing", async () => {
 	// `200 {"files": []}` is also what a folder that stopped being shared looks
 	// like — but "empty" is legal, and only the consumer knows whether its own
 	// folder can ever be.
-	const { fetch } = serve({ files: [] });
+	const { fetch } = serve([{ files: [] }]);
 
 	assert.deepEqual(await fetchPhotos({ folderId: FOLDER, auth, fetch }), []);
 });
