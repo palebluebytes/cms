@@ -19,6 +19,6 @@ _Avoid_: mapper, parser, transformer
 
 **Page walk**:
 Following `nextPageToken` until a listing is exhausted, or failing loudly rather
-than truncating. One of the two ways this package can silently hand back wrong
+than truncating. One of the ways this package could silently hand back wrong
 data, and therefore a thing with a name.
 _Avoid_: pagination, paging, page loop
