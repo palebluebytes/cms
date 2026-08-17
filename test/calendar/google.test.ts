@@ -93,17 +93,19 @@ test("sends no time window unless asked — a default one would hide past events
 	assert.equal(requested[0].searchParams.get("timeMax"), null);
 });
 
-test("timeMin and timeMax are passed through when a caller does ask", async () => {
+test("the window becomes timeMin and timeMax when a caller does ask", async () => {
 	const { fetch, requested } = serve([
 		{ timeZone: "Europe/London", items: [] },
 	]);
 
+	// `from`/`to` are the package's names for the window; mapping them to
+	// Google's two parameters is this provider's job and nobody else's.
 	await listEvents({
 		calendarId: CALENDAR,
 		auth,
 		fetch,
-		timeMin: "2020-01-01T00:00:00Z",
-		timeMax: "2030-01-01T00:00:00Z",
+		from: "2020-01-01T00:00:00Z",
+		to: "2030-01-01T00:00:00Z",
 	});
 
 	assert.equal(

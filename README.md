@@ -285,6 +285,30 @@ it is whatever the source said, and Outlook writes Windows zone names like
 `W. Europe Standard Time`. Google's are IANA; validate if you accept calendars
 from elsewhere.
 
+### The window: `from` and `to`
+
+```js
+const events = await fetchEvents({
+  calendarId,
+  auth,
+  from: "2026-01-01T00:00:00Z",
+  to: "2027-01-01T00:00:00Z",
+});
+```
+
+One meaning, for every calendar provider: **events overlapping the window**, and
+an unbounded recurring series **expanded within it**. RFC3339 with an offset —
+Google rejects a date-only value.
+
+Overlapping, not starting-within — an event already in progress at `from` is
+included. That is Google's own rule (`timeMin` bounds an event's _end_, `timeMax`
+bounds its _start_), and it is now the contract's, so a provider that filters
+client-side has to reproduce it rather than the obvious `start >= from`.
+
+**Neither end is defaulted.** A site that renders past appearances would silently
+lose half its page to a default window, and defaulting one end would need a clock
+inside a package that deliberately has none.
+
 ### What the transport always sets
 
 `singleEvents=true` (Google defaults it to **false** and returns an unexpanded
@@ -294,8 +318,10 @@ full pagination, a repeated-`pageToken` guard, and a `maxPages` backstop —
 because `singleEvents` expands an unbounded recurring series without limit, so an
 unterminating walk must fail loudly rather than loop or truncate.
 
-**No `timeMin`/`timeMax` by default.** A site that renders past appearances would
-silently lose half its page to a default window. Pass them when you want them.
+Expansion is the one to understand rather than memorise: **a consumer never
+receiving an unexpanded series is this package's guarantee**, and `singleEvents`
+is merely how Google satisfies it for free —
+[ADR-0006](docs/adr/0006-expansion-is-a-guarantee-and-a-window-terminates-it.md).
 
 ---
 

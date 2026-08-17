@@ -79,12 +79,23 @@ export interface CalendarOptions {
 	/** Defaults to the global. Integration-test seam. */
 	fetch?: FetchLike;
 	/**
-	 * RFC3339. Omitted by default: a site that renders past appearances would
-	 * silently lose half its page to a default window.
+	 * THE WINDOW, and it means one thing for every calendar provider: events
+	 * OVERLAPPING it, and an unbounded recurring series expanded within it.
+	 *
+	 * RFC3339, with an offset — Google rejects a date-only value. Both ends are
+	 * omitted by default: a site that renders past appearances would silently
+	 * lose half its page to a default window, and defaulting one end would need
+	 * a clock.
+	 *
+	 * Overlapping, not starting-within: Google's `timeMin` bounds an event's END
+	 * and `timeMax` bounds its START, so an event already in progress at `from`
+	 * is included. A second provider filtering client-side has to reproduce
+	 * exactly that — see
+	 * `docs/adr/0006-expansion-is-a-guarantee-and-a-window-terminates-it.md`.
 	 */
-	timeMin?: string;
-	/** RFC3339. */
-	timeMax?: string;
+	from?: string;
+	/** The other end of the window. See `from`. */
+	to?: string;
 	/** Backstop on the page walk. Defaults to 4. */
 	maxPages?: number;
 }
@@ -109,8 +120,8 @@ export async function listEvents({
 	calendarId,
 	auth,
 	fetch: fetchImpl,
-	timeMin,
-	timeMax,
+	from,
+	to,
 	maxPages = MAX_PAGES,
 }: CalendarOptions): Promise<{
 	timeZone: string | undefined;
@@ -126,8 +137,10 @@ export async function listEvents({
 			orderBy: "startTime",
 			maxResults: String(PAGE_SIZE),
 		});
-		if (timeMin) params.set("timeMin", timeMin);
-		if (timeMax) params.set("timeMax", timeMax);
+		// The window's names are this package's; `timeMin`/`timeMax` are Google's,
+		// and this line is the whole of the translation.
+		if (from) params.set("timeMin", from);
+		if (to) params.set("timeMax", to);
 		if (pageToken) params.set("pageToken", pageToken);
 		return `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`;
 	};
