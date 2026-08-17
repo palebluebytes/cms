@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/palebluebytes/cms/compare/v0.2.0...v0.2.1) (2026-08-17)
+
+
+### Refactoring
+
+* rewrite in TypeScript, and deepen the page walk and the send ([#2](https://github.com/palebluebytes/cms/issues/2)) ([6363f24](https://github.com/palebluebytes/cms/commit/6363f24e945ea74dc1b5d804af3b21f14f03d2dc))
+
 ## [0.2.0](https://github.com/palebluebytes/google-cms/compare/v0.1.0...v0.2.0) (2026-08-16)
 
 
